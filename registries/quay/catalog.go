@@ -50,6 +50,25 @@ func (reg *QuayioRegistry) Catalog(ctx context.Context, pagination common.Pagina
 		return res, err
 	}
 
+	// req = req.WithContext(ctx)
+	data, err := reg.CatalogAux(pagination, options)
+	if err != nil {
+		return nil, err
+	}
+	repositories := data.Transform(pagination.Size)
+	for data.Cursor != "" {
+		pagination.Cursor = data.Cursor
+		data, err := reg.CatalogAux(pagination, options)
+		if err != nil {
+			return repositories, fmt.Errorf("partial success, failed due to %s", err.Error())
+		}
+		repositories = append(repositories, data.Transform(0)...)
+
+	}
+	return repositories, nil
+}
+
+func (reg *QuayioRegistry) CatalogAux(pagination common.PaginationOption, options common.CatalogOption) (*QuayCatalogResponse, error) {
 	uri := reg.getURL("repository")
 	uri = catalogOptionsToQuery(uri, pagination, options)
 	client := http.Client{}
@@ -58,7 +77,6 @@ func (reg *QuayioRegistry) Catalog(ctx context.Context, pagination common.Pagina
 	if err != nil {
 		return nil, err
 	}
-	// req = req.WithContext(ctx)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -74,9 +92,5 @@ func (reg *QuayioRegistry) Catalog(ctx context.Context, pagination common.Pagina
 		return nil, err
 	}
 	body = nil
-	repositories := data.Transform(pagination.Size)
-	if len(repositories) < pagination.Size && data.Cursor != "" {
-
-	}
-	return repositories, nil
+	return data, nil
 }
