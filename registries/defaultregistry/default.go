@@ -17,14 +17,15 @@ import (
 type DefaultRegistry struct {
 	Registry *name.Registry
 	Auth     *authn.AuthConfig
+	Cfg      *common.RegistryOptions
 }
 
-func NewRegistry(auth *authn.AuthConfig, registry *name.Registry) (interfaces.IRegistry, error) {
+func NewRegistry(auth *authn.AuthConfig, registry *name.Registry, registryCfg *common.RegistryOptions) (interfaces.IRegistry, error) {
 	if registry.Name() == "" {
 		return nil, fmt.Errorf("must provide a non empty registry")
 	}
 
-	return &DefaultRegistry{Auth: auth, Registry: registry}, nil
+	return &DefaultRegistry{Auth: auth, Registry: registry, Cfg: registryCfg}, nil
 
 }
 
@@ -44,9 +45,9 @@ func (reg *DefaultRegistry) getURL(urlSuffix string) *url.URL {
 	}
 }
 
-func (reg *DefaultRegistry) Catalog(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption) ([]string, error) {
+func (reg *DefaultRegistry) Catalog(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption, authenticator authn.Authenticator) ([]string, error) {
 	regis := reg.GetRegistry().Name()
-	if regis == "index.docker.io" {
+	if regis == "index.docker.io" && authenticator == nil {
 		token, err := dockerregistry.Token(reg.GetAuth(), reg.GetRegistry())
 		if err != nil {
 			return nil, err
@@ -59,8 +60,10 @@ func (reg *DefaultRegistry) Catalog(ctx context.Context, pagination common.Pagin
 	//auth part not working though w/o removing scope
 	if err := common.ValidateAuth(reg.GetAuth()); err == nil {
 		// res, err := remote.CatalogPage(*reg.GetRegistry(), pagination.Cursor, pagination.Size, remote.WithAuth(authn.FromConfig(*reg.GetAuth())))
-
-		res, err := remote.Catalog(ctx, *reg.GetRegistry(), remote.WithAuth(authn.FromConfig(*reg.GetAuth())))
+		if authenticator == nil {
+			authenticator = authn.FromConfig(*reg.GetAuth())
+		}
+		res, err := remote.Catalog(ctx, *reg.GetRegistry(), remote.WithAuth(authenticator))
 		if err != nil {
 			return nil, err
 		}

@@ -9,7 +9,7 @@ import (
 )
 
 type IRegistry interface {
-	Catalog(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption) ([]string, error)
+	Catalog(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption, authenticator authn.Authenticator) ([]string, error)
 	// List()
 	// Tags()
 	GetAuth() *authn.AuthConfig
