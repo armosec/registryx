@@ -36,13 +36,13 @@ func catalogOptionsToQuery(uri *url.URL, pagination common.PaginationOption, opt
 	return uri
 }
 func (reg *QuayioRegistry) Catalog(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption) ([]string, error) {
-	if err := common.ValidateAuth(reg.auth); err != nil && !options.IsPublic && options.Namespaces == "" {
+	if err := common.ValidateAuth(reg.GetAuth()); err != nil && !options.IsPublic && options.Namespaces == "" {
 		return nil, fmt.Errorf("quay.io supports no/empty auth information only for public/namespaced registries")
 	}
 
 	//auth part not working though w/o removing scope
-	if err := common.ValidateAuth(reg.auth); err == nil {
-		res, err := remote.CatalogPage(*reg.registry, pagination.Cursor, pagination.Size, remote.WithAuth(authn.FromConfig(*reg.auth)))
+	if err := common.ValidateAuth(reg.GetAuth()); err == nil {
+		res, err := remote.CatalogPage(*reg.GetRegistry(), pagination.Cursor, pagination.Size, remote.WithAuth(authn.FromConfig(*reg.GetAuth())))
 		if err != nil {
 			return nil, err
 		}
@@ -77,7 +77,6 @@ func (reg *QuayioRegistry) CatalogAux(pagination common.PaginationOption, option
 	if err != nil {
 		return nil, err
 	}
-
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
