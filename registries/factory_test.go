@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/LiorAlafiArmo/registryx/common"
+	"github.com/armosec/registryx/common"
 	"github.com/google/go-containerregistry/pkg/name"
 )
 

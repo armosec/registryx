@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/LiorAlafiArmo/registryx/common"
-	"github.com/LiorAlafiArmo/registryx/interfaces"
-	"github.com/LiorAlafiArmo/registryx/registries/dockerregistry"
+	"github.com/armosec/registryx/common"
+	"github.com/armosec/registryx/interfaces"
+	"github.com/armosec/registryx/registries/dockerregistry"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"

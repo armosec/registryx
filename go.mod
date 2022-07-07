@@ -1,4 +1,4 @@
-module github.com/LiorAlafiArmo/registryx
+module github.com/armosec/registryx
 
 go 1.18
 

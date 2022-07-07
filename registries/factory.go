@@ -1,10 +1,10 @@
 package registries
 
 import (
-	"github.com/LiorAlafiArmo/registryx/common"
-	"github.com/LiorAlafiArmo/registryx/interfaces"
-	"github.com/LiorAlafiArmo/registryx/registries/defaultregistry"
-	"github.com/LiorAlafiArmo/registryx/registries/quay"
+	"github.com/armosec/registryx/common"
+	"github.com/armosec/registryx/interfaces"
+	"github.com/armosec/registryx/registries/defaultregistry"
+	"github.com/armosec/registryx/registries/quay"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 )
