@@ -8,13 +8,14 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/LiorAlafiArmo/registryx/common"
 	"github.com/LiorAlafiArmo/registryx/interfaces"
 	"github.com/LiorAlafiArmo/registryx/registries/defaultregistry"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 )
 
-func NewQuayIORegistry(auth *authn.AuthConfig, registry *name.Registry) (interfaces.IRegistry, error) {
+func NewQuayIORegistry(auth *authn.AuthConfig, registry *name.Registry, registryCfg *common.RegistryOptions) (interfaces.IRegistry, error) {
 	if registry.Name() == "" {
 		return nil, fmt.Errorf("must provide a non empty registry")
 	}

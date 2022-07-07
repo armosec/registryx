@@ -5,22 +5,22 @@ import (
 	"testing"
 
 	"github.com/LiorAlafiArmo/registryx/common"
-	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 )
 
+//NOT WORKING --- YET
 func TestDocker(t *testing.T) {
 	registry, err := name.NewRegistry("")
 	if err != nil {
 		t.Errorf("%s", err.Error())
 	}
-	reg, err := Factory(&authn.AuthConfig{Username: "lioralafi1", Password: "something!wild"}, &registry)
+	reg, err := Factory(nil, &registry, nil)
 	if err != nil {
 		t.Errorf("%s", err.Error())
 	}
 
 	ctx := context.Background()
-	res, err := reg.Catalog(ctx, common.NoPagination(0), common.CatalogOption{})
+	res, err := reg.Catalog(ctx, common.NoPagination(0), common.CatalogOption{}, nil)
 	if err != nil {
 		t.Errorf("%s", err.Error())
 	}
