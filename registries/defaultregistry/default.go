@@ -45,12 +45,18 @@ func (reg *DefaultRegistry) getURL(urlSuffix string) *url.URL {
 	}
 }
 
-func (reg *DefaultRegistry) Catalog(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption, authenticator authn.Authenticator) ([]string, error) {
+func (reg *DefaultRegistry) List(repo name.Repository, pagination common.PaginationOption, options ...remote.Option) ([]string, *common.PaginationOption, error) {
+	tags, err := remote.List(repo, options...)
+	//TODO handle pagination
+	return tags, nil, err
+}
+
+func (reg *DefaultRegistry) Catalog(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption, authenticator authn.Authenticator) ([]string, *common.PaginationOption, error) {
 	regis := reg.GetRegistry().Name()
 	if regis == "index.docker.io" && authenticator == nil {
 		token, err := dockerregistry.Token(reg.GetAuth(), reg.GetRegistry())
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if reg.Auth == nil {
 			reg.Auth = &authn.AuthConfig{}
@@ -65,12 +71,14 @@ func (reg *DefaultRegistry) Catalog(ctx context.Context, pagination common.Pagin
 		}
 		res, err := remote.Catalog(ctx, *reg.GetRegistry(), remote.WithAuth(authenticator))
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return res, err
+		return res, nil, err
 	}
 	if regis == "index.docker.io" {
-		return remote.Catalog(ctx, *reg.GetRegistry(), remote.WithAuth(authn.FromConfig(*reg.GetAuth())))
+		repos, err := remote.Catalog(ctx, *reg.GetRegistry(), remote.WithAuth(authn.FromConfig(*reg.GetAuth())))
+		return repos, nil, err
 	}
-	return remote.CatalogPage(*reg.GetRegistry(), pagination.Cursor, pagination.Size, remote.WithAuth(authn.Anonymous))
+	repos, err := remote.CatalogPage(*reg.GetRegistry(), pagination.Cursor, pagination.Size, remote.WithAuth(authn.Anonymous))
+	return repos, common.CalcNextV2Pagination(repos, pagination.Size), err
 }

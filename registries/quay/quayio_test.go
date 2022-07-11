@@ -20,7 +20,7 @@ func TestSimpleNoAuth(t *testing.T) {
 	}
 	quayio, err := NewQuayIORegistry(nil, &registry, &common.RegistryOptions{})
 	ctx := context.Background()
-	repos, err := quayio.Catalog(ctx, common.NoPagination(0), common.CatalogOption{IsPublic: true, Namespaces: "quay"}, nil)
+	repos, _, err := quayio.Catalog(ctx, common.NoPaginationOption(), common.CatalogOption{IsPublic: true, Namespaces: "quay"}, nil)
 	if err != nil {
 		t.Errorf("%v", err.Error())
 	}

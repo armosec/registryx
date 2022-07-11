@@ -1,16 +1,9 @@
 package registries
 
-import (
-	"context"
-	"testing"
-
-	"github.com/armosec/registryx/common"
-	"github.com/google/go-containerregistry/pkg/name"
-)
-
 //NOT WORKING --- YET
+/*
 func TestDocker(t *testing.T) {
-	registry, err := name.NewRegistry("")
+	registry, err := name.NewRegistry("", name.Insecure)
 	if err != nil {
 		t.Errorf("%s", err.Error())
 	}
@@ -20,9 +13,10 @@ func TestDocker(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	res, err := reg.Catalog(ctx, common.NoPagination(0), common.CatalogOption{}, nil)
+	res, _, err := reg.Catalog(ctx, common.NoPaginationOption(), common.CatalogOption{}, nil)
 	if err != nil {
 		t.Errorf("%s", err.Error())
 	}
 	t.Errorf("%v", res)
 }
+*/
