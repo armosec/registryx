@@ -1,5 +1,15 @@
 package registries
 
+import (
+	"context"
+	"fmt"
+	"testing"
+
+	"github.com/armosec/registryx/common"
+	"github.com/armosec/registryx/interfaces"
+	"github.com/google/go-containerregistry/pkg/name"
+)
+
 //NOT WORKING --- YET
 /*
 func TestDocker(t *testing.T) {
@@ -21,8 +31,8 @@ func TestDocker(t *testing.T) {
 }
 */
 
-/*
 //these tests needs a real harbor server
+/*
 var harborRegHost string = "myharbor1.org"
 
 func TestHarborCommonUser(t *testing.T) {
@@ -64,33 +74,29 @@ func TestHarborAdminProject(t *testing.T) {
 	testHarbor(reg, t, registry)
 }
 */
+
 func testHarbor(reg interfaces.IRegistry, t *testing.T, registry name.Registry) {
 	ctx := context.Background()
-	for repos, nextPage, err := reg.Catalog(ctx, common.MakePagination(1), common.CatalogOption{}, nil); nextPage != nil; repos, nextPage, err = reg.Catalog(ctx, *nextPage, common.CatalogOption{}, nil) {
+	for repos, repoNextPage, err := reg.Catalog(ctx, common.MakePagination(1), common.CatalogOption{}, nil); err == nil; repos, repoNextPage, err = reg.Catalog(ctx, *repoNextPage, common.CatalogOption{}, nil) {
 		if err != nil {
 			t.Errorf("%s", err.Error())
 		}
 		fmt.Printf("repos: %v\n", repos)
-
 		for _, repoName := range repos {
-            //TODO change interface to accept name and do this stuff inside the reg
-			repo, err := name.NewRepository(repoName)
-			if err != nil {
-				t.Errorf("%s\n", err.Error())
-			}
-			repo.Registry = registry
-
+			//TODO change interface to accept name and do this stuff inside the reg
 			fmt.Printf("  Repo :%s\n", repoName)
-			for tags, nextPage, err := reg.List(repo, common.MakePagination(1)); nextPage != nil; tags, nextPage, err = reg.List(repo, *nextPage) {
+			for tags, tagsNextPage, err := reg.List(repoName, common.MakePagination(1)); err == nil; tags, tagsNextPage, err = reg.List(repoName, *tagsNextPage) {
 				if err != nil {
 					t.Errorf("%s", err.Error())
 				}
 				fmt.Printf("    %s tags: %v\n", repoName, tags)
-
+				if tagsNextPage == nil {
+					break
+				}
 			}
-
 		}
-
+		if repoNextPage == nil {
+			break
+		}
 	}
 }
-*/

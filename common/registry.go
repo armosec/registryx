@@ -1,5 +1,7 @@
 package common
 
+import "github.com/google/go-containerregistry/pkg/name"
+
 const (
 	DEFAULT_REGISTRY = "index.docker.io"
 	DEFAULT_TAG      = "latest"
@@ -36,6 +38,18 @@ func MakeRegistryOptions(isStrict, isInsecure, skipTLSVerify bool, defaultRegist
 		kind = Generic
 	}
 	return &RegistryOptions{strict: isStrict, insecure: isInsecure, defaultRegistry: defaultRegistry, defaultTag: defaultTag, project: project, skipTLSVerify: skipTLSVerify, kind: kind}
+}
+
+func MakeRepoWithRegistry(repoName string, registry *name.Registry) (*name.Repository, error) {
+	repo, err := name.NewRepository(repoName)
+	if err != nil {
+		return nil, err
+	}
+	if registry != nil {
+		repo.Registry = *registry
+	}
+	return &repo, nil
+
 }
 
 func (r *RegistryOptions) Kind() RegistryKind {
