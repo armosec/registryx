@@ -58,10 +58,7 @@ func TestCatalogAndList(t *testing.T) {
 	}
 
 	//test list tags
-	repoData, err := name.NewRepository(repos[0])
-	assert.Nil(t, err)
-	repoData.Registry = registry
-	tags, nextPage, err := harbor.List(repoData, common.NoPaginationOption())
+	tags, nextPage, err := harbor.List(repos[0], common.NoPaginationOption())
 	assert.Nil(t, err)
 	assert.Nil(t, nextPage)
 	assert.Equal(t, []string{"latest", "v0.26", "v0.27", "v0.28", "v22"}, tags)
@@ -145,10 +142,7 @@ func TestCatalogAndListWithProjectAndPagination(t *testing.T) {
 	}
 
 	//test list tags
-	repoData, err := name.NewRepository(repos[0])
-	assert.Nil(t, err)
-	repoData.Registry = registry
-	tags, nextTagsPage, err := harbor.List(repoData, common.MakePagination(2))
+	tags, nextTagsPage, err := harbor.List(repos[0], common.MakePagination(2))
 	assert.Nil(t, err)
 	assert.Equal(t, &common.PaginationOption{Cursor: "v0.26", Size: 2}, nextTagsPage)
 	assert.Equal(t, []string{"latest", "v0.26"}, tags)
@@ -164,7 +158,7 @@ func TestCatalogAndListWithProjectAndPagination(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	_, nextTagsPage, err = harbor.List(repoData, *nextTagsPage)
+	_, nextTagsPage, err = harbor.List(repos[0], *nextTagsPage)
 	assert.Nil(t, err)
 	assert.Equal(t, &common.PaginationOption{Cursor: "v0.28", Size: 2}, nextTagsPage)
 	testServer.Close()
@@ -178,7 +172,7 @@ func TestCatalogAndListWithProjectAndPagination(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	_, nextTagsPage, err = harbor.List(repoData, *nextTagsPage)
+	_, nextTagsPage, err = harbor.List(repos[0], *nextTagsPage)
 	assert.Nil(t, err)
 	assert.Nil(t, nextTagsPage)
 	testServer.Close()

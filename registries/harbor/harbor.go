@@ -74,15 +74,23 @@ func (h *HarborRegistry) Catalog(ctx context.Context, pagination common.Paginati
 	}
 }
 
-func (h *HarborRegistry) List(repo name.Repository, pagination common.PaginationOption, options ...remote.Option) ([]string, *common.PaginationOption, error) {
+func (h *HarborRegistry) List(repoName string, pagination common.PaginationOption, options ...remote.Option) ([]string, *common.PaginationOption, error) {
+	repo, err := common.MakeRepoWithRegistry(repoName, h.Registry)
+	if err != nil {
+		return nil, nil, err
+	}
 	//create list tag request
-	req, err := h.listTagsRequest(repo, strconv.Itoa(pagination.Size), pagination.Cursor)
+	req, err := h.listTagsRequest(*repo, strconv.Itoa(pagination.Size), pagination.Cursor)
 	if err != nil {
 		return nil, nil, err
 	}
 	//create client according to registry configuration
 	res, err := h.getClient().Do(req)
 	if err != nil {
+		return nil, nil, err
+	}
+
+	if err := transport.CheckError(res, http.StatusOK); err != nil {
 		return nil, nil, err
 	}
 

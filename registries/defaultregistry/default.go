@@ -45,8 +45,12 @@ func (reg *DefaultRegistry) getURL(urlSuffix string) *url.URL {
 	}
 }
 
-func (reg *DefaultRegistry) List(repo name.Repository, pagination common.PaginationOption, options ...remote.Option) ([]string, *common.PaginationOption, error) {
-	tags, err := remote.List(repo, options...)
+func (reg *DefaultRegistry) List(repoName string, pagination common.PaginationOption, options ...remote.Option) ([]string, *common.PaginationOption, error) {
+	repoData, err := common.MakeRepoWithRegistry(repoName, reg.Registry)
+	if err != nil {
+		return nil, nil, err
+	}
+	tags, err := remote.List(*repoData, options...)
 	//TODO handle pagination
 	return tags, nil, err
 }
