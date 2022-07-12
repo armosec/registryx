@@ -1,0 +1,47 @@
+[
+    {
+        "artifact_count": 4,
+        "creation_time": "2022-07-06T12:15:17.729Z",
+        "id": 5,
+        "name": "my-project/ca-ws",
+        "project_id": 2,
+        "pull_count": 8,
+        "update_time": "2022-07-07T10:02:35.987Z"
+    },
+    {
+        "artifact_count": 1,
+        "creation_time": "2022-07-06T07:23:08.860Z",
+        "id": 4,
+        "name": "user2private/kibana",
+        "project_id": 4,
+        "pull_count": 0,
+        "update_time": "2022-07-06T07:23:08.860Z"
+    },
+    {
+        "artifact_count": 1,
+        "creation_time": "2022-07-06T07:19:22.449Z",
+        "id": 3,
+        "name": "user-project/kibana",
+        "project_id": 3,
+        "pull_count": 0,
+        "update_time": "2022-07-06T07:19:22.449Z"
+    },
+    {
+        "artifact_count": 2,
+        "creation_time": "2022-07-06T01:23:44.983Z",
+        "id": 2,
+        "name": "my-project/kibana",
+        "project_id": 2,
+        "pull_count": 2,
+        "update_time": "2022-07-06T15:51:04.776Z"
+    },
+    {
+        "artifact_count": 1,
+        "creation_time": "2022-07-05T16:35:15.640Z",
+        "id": 1,
+        "name": "my-project/postgres",
+        "project_id": 2,
+        "pull_count": 2,
+        "update_time": "2022-07-06T15:51:44.781Z"
+    }
+]
