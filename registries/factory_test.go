@@ -63,6 +63,7 @@ func TestHarborAdminProject(t *testing.T) {
 	}
 	testHarbor(reg, t, registry)
 }
+*/
 func testHarbor(reg interfaces.IRegistry, t *testing.T, registry name.Registry) {
 	ctx := context.Background()
 	for repos, nextPage, err := reg.Catalog(ctx, common.MakePagination(1), common.CatalogOption{}, nil); nextPage != nil; repos, nextPage, err = reg.Catalog(ctx, *nextPage, common.CatalogOption{}, nil) {
