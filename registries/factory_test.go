@@ -7,7 +7,6 @@ import (
 
 	"github.com/armosec/registryx/common"
 	"github.com/armosec/registryx/interfaces"
-	"github.com/google/go-containerregistry/pkg/name"
 )
 
 //NOT WORKING --- YET
@@ -36,46 +35,34 @@ func TestDocker(t *testing.T) {
 var harborRegHost string = "myharbor1.org"
 
 func TestHarborCommonUser(t *testing.T) {
-	registry, err := name.NewRegistry(harborRegHost)
-	if err != nil {
-		t.Errorf("%s", err.Error())
-	}
-	reg, err := Factory(&authn.AuthConfig{Username: "auser", Password: "Abc12345"}, &registry,
+	reg, err := Factory(&authn.AuthConfig{Username: "auser", Password: "Abc12345"}, harborRegHost,
 		common.MakeRegistryOptions(true, false, false, "", "", "", common.Harbor))
 	if err != nil {
 		t.Errorf("%s", err.Error())
 	}
-	testHarbor(reg, t, registry)
+	testHarbor(reg, t)
 }
 
 func TestHarborAdmin(t *testing.T) {
-	registry, err := name.NewRegistry(harborRegHost)
-	if err != nil {
-		t.Errorf("%s", err.Error())
-	}
-	reg, err := Factory(&authn.AuthConfig{Username: "admin", Password: "Harbor12345"}, &registry,
+	reg, err := Factory(&authn.AuthConfig{Username: "admin", Password: "Harbor12345"}, harborRegHost,
 		common.MakeRegistryOptions(true, false, false, "", "", "", common.Harbor))
 	if err != nil {
 		t.Errorf("%s", err.Error())
 	}
-	testHarbor(reg, t, registry)
+	testHarbor(reg, t)
 }
 
 func TestHarborAdminProject(t *testing.T) {
-	registry, err := name.NewRegistry(harborRegHost)
-	if err != nil {
-		t.Errorf("%s", err.Error())
-	}
-	reg, err := Factory(&authn.AuthConfig{Username: "admin", Password: "Harbor12345"}, &registry,
+	reg, err := Factory(&authn.AuthConfig{Username: "admin", Password: "Harbor12345"}, harborRegHost,
 		common.MakeRegistryOptions(true, false, false, "", "", "user-project", common.Harbor))
 	if err != nil {
 		t.Errorf("%s", err.Error())
 	}
-	testHarbor(reg, t, registry)
+	testHarbor(reg, t)
 }
 */
 
-func testHarbor(reg interfaces.IRegistry, t *testing.T, registry name.Registry) {
+func testHarbor(reg interfaces.IRegistry, t *testing.T) {
 	ctx := context.Background()
 	for repos, repoNextPage, err := reg.Catalog(ctx, common.MakePagination(1), common.CatalogOption{}, nil); err == nil; repos, repoNextPage, err = reg.Catalog(ctx, *repoNextPage, common.CatalogOption{}, nil) {
 		if err != nil {
