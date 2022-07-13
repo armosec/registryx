@@ -29,6 +29,10 @@ func NewRegistry(auth *authn.AuthConfig, registry *name.Registry, registryCfg *c
 
 }
 
+func (reg *DefaultRegistry) GetMaxPageSize() int {
+	return 1000
+}
+
 func (reg *DefaultRegistry) GetAuth() *authn.AuthConfig {
 	return reg.Auth
 }
