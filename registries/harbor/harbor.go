@@ -32,6 +32,11 @@ type HarborRegistry struct {
 	defaultregistry.DefaultRegistry
 }
 
+func (*HarborRegistry) GetMaxPageSize() int {
+	//Harbor limits page size to 100 elements
+	return 100
+}
+
 func (h *HarborRegistry) Catalog(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption, authenticator authn.Authenticator) ([]string, *common.PaginationOption, error) {
 	//if first pagination request set the page number (cursor) to 1
 	if len(pagination.Cursor) == 0 {

@@ -1,6 +1,11 @@
 package common
 
-import "github.com/google/go-containerregistry/pkg/name"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/google/go-containerregistry/pkg/name"
+)
 
 const (
 	DEFAULT_REGISTRY = "index.docker.io"
@@ -10,7 +15,7 @@ const (
 type RegistryKind string
 
 const (
-	Generic RegistryKind = "generic"
+	Generic RegistryKind = ""
 	Harbor  RegistryKind = "harbor"
 	Quay    RegistryKind = "quay.io"
 )
@@ -23,6 +28,20 @@ type RegistryOptions struct {
 	project         string       // empty
 	skipTLSVerify   bool         // default: do not skip
 	kind            RegistryKind //registry provider (e.g. harbor) default is "Generic"
+}
+
+func GetRegistryKind(kindStr string) (RegistryKind, error) {
+	switch RegistryKind(strings.ToLower(kindStr)) {
+	case Harbor:
+		return Harbor, nil
+	case Quay:
+		return Quay, nil
+	case Generic:
+		return Generic, nil
+	default:
+		return Generic, fmt.Errorf("unsupported registry kind %s, defaulting to generic kind ", kindStr)
+
+	}
 }
 
 func MakeRegistryOptions(isStrict, isInsecure, skipTLSVerify bool, defaultRegistry, defaultTag, project string, kind RegistryKind) *RegistryOptions {
@@ -56,12 +75,20 @@ func (r *RegistryOptions) Kind() RegistryKind {
 	return r.kind
 }
 
+func (r *RegistryOptions) DefaultRegistry() string {
+	return r.defaultRegistry
+}
+
+func (r *RegistryOptions) DefaultTag() string {
+	return r.defaultTag
+}
+
 func (r *RegistryOptions) Project() string {
 	return r.project
 }
 
-func (r *RegistryOptions) Strict(strict bool) {
-	r.strict = strict
+func (r *RegistryOptions) Strict() bool {
+	return r.strict
 }
 
 func (r *RegistryOptions) Insecure() bool {
