@@ -42,18 +42,19 @@ func TestSimpleNoAuth(t *testing.T) {
 	}
 }
 
-// func TestSimpleAuth(t *testing.T) {
-// 	registry, err := name.NewRegistry("quay.io")
-// 	if err != nil {
-// 		t.Errorf("err1: %v", err.Error())
-// 	}
-// 	quayio, err := NewQuayIORegistry(&authn.AuthConfig{Username: "<user>", Password: "<secret>"}, &registry)
-// 	ctx := context.Background()
-// 	data, err := quayio.Catalog(ctx, common.NoPagination(0), common.CatalogOption{IsPublic: true, Namespaces: "armosec"})
-// 	if err != nil {
-// 		t.Errorf("%v", err)
-// 		return
-// 	}
-// 	t.Errorf("%v", data)
+func TestSimpleAuth(t *testing.T) {
+	registry, err := name.NewRegistry("quay.io")
+	if err != nil {
+		t.Errorf("err1: %v", err.Error())
+	}
+	quayio, err := NewQuayIORegistry(&authn.AuthConfig{Username: "armosec+cajenkins", Password: "D4TEPRNY57BH8RA6KMCNRJ4V462PA1EUXJ8H2SM4OYJW12FMOJIEBNUH8MY65B6S"}, &registry, common.MakeRegistryOptions(false, false, false, "quay.io", "", "", common.Quay))
+	ctx := context.Background()
+	data, _, err := quayio.Catalog(ctx, common.NoPaginationOption(), common.CatalogOption{Namespaces: "armosec"}, nil)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
 
-// }
+	t.Errorf("%v", data)
+
+}

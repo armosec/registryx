@@ -6,6 +6,10 @@ import (
 	"github.com/google/go-containerregistry/pkg/authn"
 )
 
+type V2TokenResponse struct {
+	Token string `json:"token"`
+}
+
 func ValidateAuth(auth *authn.AuthConfig) error {
 	if auth == nil {
 		return fmt.Errorf("no auth")

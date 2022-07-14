@@ -2,7 +2,10 @@ package defaultregistry
 
 import (
 	"context"
+	b64 "encoding/base64"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 
 	"github.com/armosec/registryx/common"
@@ -12,6 +15,10 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 )
+
+type CatalogV2Response struct {
+	Repositories []string `json:"repositories"`
+}
 
 // this is just a wrapper around the go-container & remote catalog
 type DefaultRegistry struct {
@@ -89,4 +96,38 @@ func (reg *DefaultRegistry) Catalog(ctx context.Context, pagination common.Pagin
 	}
 	repos, err := remote.CatalogPage(*reg.GetRegistry(), pagination.Cursor, pagination.Size, remote.WithAuth(authn.Anonymous))
 	return repos, common.CalcNextV2Pagination(repos, pagination.Size), err
+}
+
+func (reg *DefaultRegistry) GetV2Token(client *http.Client, url string) (*common.V2TokenResponse, error) {
+	if reg.GetAuth() == nil {
+		return nil, fmt.Errorf("no authorization found")
+	}
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if reg.GetAuth().Username != "" && reg.GetAuth().Password != "" {
+		usrpwd := b64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", reg.GetAuth().Username, reg.GetAuth().Password)))
+		req.Header.Add("Authorization", fmt.Sprintf("Basic %s", usrpwd))
+	}
+
+	resp, err := client.Do(req)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+
+	token := &common.V2TokenResponse{}
+
+	if err := json.NewDecoder(resp.Body).Decode(token); err != nil {
+		return nil, err
+	}
+
+	if token.Token == "" {
+		return nil, fmt.Errorf("recieved an empty token")
+	}
+	return token, nil
 }
