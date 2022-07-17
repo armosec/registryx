@@ -99,7 +99,7 @@ func (reg *QuayioRegistry) catalogQuayProprietery(pagination common.PaginationOp
 	}
 	repositories := data.Transform(pagination.Size)
 	var pgn *common.PaginationOption = nil
-	for data.Cursor != "" {
+	if data.Cursor != "" {
 		pgn = &common.PaginationOption{Cursor: data.Cursor, Size: pagination.Size}
 
 		repositories = append(repositories, data.Transform(0)...)
