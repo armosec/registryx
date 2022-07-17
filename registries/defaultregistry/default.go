@@ -10,7 +10,6 @@ import (
 
 	"github.com/armosec/registryx/common"
 	"github.com/armosec/registryx/interfaces"
-	"github.com/armosec/registryx/registries/dockerregistry"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
@@ -66,33 +65,18 @@ func (reg *DefaultRegistry) List(repoName string, pagination common.PaginationOp
 	return tags, nil, err
 }
 
+// this is the default catalog implementation uses remote(for now)
 func (reg *DefaultRegistry) Catalog(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption, authenticator authn.Authenticator) ([]string, *common.PaginationOption, error) {
-	regis := reg.GetRegistry().Name()
-	if regis == "index.docker.io" && authenticator == nil {
-		token, err := dockerregistry.Token(reg.GetAuth(), reg.GetRegistry())
-		if err != nil {
-			return nil, nil, err
-		}
-		if reg.Auth == nil {
-			reg.Auth = &authn.AuthConfig{}
-		}
-		reg.Auth.RegistryToken = token.Token
-	}
-	//auth part not working though w/o removing scope
+
 	if err := common.ValidateAuth(reg.GetAuth()); err == nil {
-		// res, err := remote.CatalogPage(*reg.GetRegistry(), pagination.Cursor, pagination.Size, remote.WithAuth(authn.FromConfig(*reg.GetAuth())))
 		if authenticator == nil {
 			authenticator = authn.FromConfig(*reg.GetAuth())
 		}
-		res, err := remote.Catalog(ctx, *reg.GetRegistry(), remote.WithAuth(authenticator))
+		res, err := remote.CatalogPage(*reg.GetRegistry(), pagination.Cursor, pagination.Size, remote.WithAuth(authn.FromConfig(*reg.GetAuth())))
 		if err != nil {
 			return nil, nil, err
 		}
 		return res, nil, err
-	}
-	if regis == "index.docker.io" {
-		repos, err := remote.Catalog(ctx, *reg.GetRegistry(), remote.WithAuth(authn.FromConfig(*reg.GetAuth())))
-		return repos, nil, err
 	}
 	repos, err := remote.CatalogPage(*reg.GetRegistry(), pagination.Cursor, pagination.Size, remote.WithAuth(authn.Anonymous))
 	return repos, common.CalcNextV2Pagination(repos, pagination.Size), err
