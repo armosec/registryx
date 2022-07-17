@@ -47,7 +47,7 @@ func (reg *DefaultRegistry) GetRegistry() *name.Registry {
 	return reg.Registry
 }
 
-func (reg *DefaultRegistry) getURL(urlSuffix string) *url.URL {
+func (reg *DefaultRegistry) GetURL(urlSuffix string) *url.URL {
 
 	return &url.URL{
 		Scheme: reg.Registry.Scheme(),

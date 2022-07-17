@@ -70,12 +70,7 @@ func (reg *QuayioRegistry) catalogQuayV2Auth(pagination common.PaginationOption,
 		return nil, nil, err
 	}
 
-	uri := url.URL{
-		Scheme: reg.GetRegistry().Scheme(),
-		Host:   reg.GetRegistry().RegistryStr(),
-		Path:   "/v2/_catalog",
-	}
-
+	uri := reg.DefaultRegistry.GetURL("_catalog")
 	q := uri.Query()
 	if pagination.Cursor != "" {
 		q.Add("last", pagination.Cursor)
