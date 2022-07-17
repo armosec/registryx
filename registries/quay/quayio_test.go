@@ -35,12 +35,15 @@ func TestSimpleNoAuth(t *testing.T) {
 
 // func TestSimpleAuth(t *testing.T) {
 // 	registry, err := name.NewRegistry("quay.io")
-// 	assert.Nil(t, err, err.Error())
+// 	assert.Nil(t, err, "")
 
 // 	quayio, err := NewQuayIORegistry(&authn.AuthConfig{Username: "", Password: ""}, &registry, common.MakeRegistryOptions(false, false, false, "quay.io", "", "", common.Quay))
 // 	ctx := context.Background()
 // 	data, _, err := quayio.Catalog(ctx, common.NoPaginationOption(), common.CatalogOption{Namespaces: "armosec"}, nil)
-// 	assert.Nil(t, err, err.Error())
+// 	assert.Nil(t, err, "")
 // 	assert.NotEqual(t, len(data), 0, "received an empty results")
-
+// 	assert.Nil(t, err, "failed to create repo data")
+// 	fullRepoName := quayio.GetRegistry().Name() + "/" + data[0]
+// 	tags, _, err := quayio.List(fullRepoName, common.NoPaginationOption(), remote.WithAuth(authn.FromConfig(*quayio.GetAuth())))
+// 	t.Errorf("%v", tags)
 // }

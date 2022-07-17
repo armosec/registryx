@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"time"
 
 	"github.com/armosec/registryx/common"
 	"github.com/armosec/registryx/registries/defaultregistry"
@@ -62,14 +61,13 @@ func (reg *QuayioRegistry) Catalog(ctx context.Context, pagination common.Pagina
 }
 
 func (reg *QuayioRegistry) catalogQuayV2Auth(pagination common.PaginationOption, options common.CatalogOption) ([]string, *common.PaginationOption, error) {
-	client := http.Client{Timeout: time.Duration(150) * time.Second}
 
 	//Token Request
-	token, err := reg.GetV2Token(&client, AUTH_URL)
+	token, err := reg.GetV2Token(reg.HTTPClient, AUTH_URL)
 	if err != nil {
 		return nil, nil, err
 	}
-
+	reg.GetAuth().RegistryToken = token.Token
 	uri := reg.DefaultRegistry.GetURL("_catalog")
 	q := uri.Query()
 	if pagination.Cursor != "" {
@@ -84,7 +82,7 @@ func (reg *QuayioRegistry) catalogQuayV2Auth(pagination common.PaginationOption,
 		return nil, nil, err
 	}
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", token.Token))
-	resp, err := client.Do(req)
+	resp, err := reg.HTTPClient.Do(req)
 	if err != nil {
 		return nil, nil, err
 	}

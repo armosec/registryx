@@ -6,7 +6,9 @@ see https://docs.quay.io/api/swagger/
 */
 import (
 	"fmt"
+	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/armosec/registryx/common"
 	"github.com/armosec/registryx/interfaces"
@@ -20,12 +22,14 @@ func NewQuayIORegistry(auth *authn.AuthConfig, registry *name.Registry, registry
 		return nil, fmt.Errorf("must provide a non empty registry")
 	}
 
-	return &QuayioRegistry{DefaultRegistry: defaultregistry.DefaultRegistry{Registry: registry, Auth: auth}}, nil
+	return &QuayioRegistry{HTTPClient: &http.Client{Timeout: time.Duration(150) * time.Second},
+		DefaultRegistry: defaultregistry.DefaultRegistry{Registry: registry, Auth: auth}}, nil
 
 }
 
 type QuayioRegistry struct {
 	defaultregistry.DefaultRegistry
+	HTTPClient *http.Client
 }
 
 func (reg *QuayioRegistry) GetAuth() *authn.AuthConfig {
