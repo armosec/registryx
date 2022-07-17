@@ -36,7 +36,7 @@ func catalogOptionsToQuery(uri *url.URL, pagination common.PaginationOption, opt
 	return uri
 }
 func (reg *QuayioRegistry) Catalog(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption, authenticator authn.Authenticator) ([]string, *common.PaginationOption, error) {
-	if err := common.ValidateAuth(reg.GetAuth()); err != nil && !options.IsPublic && options.Namespaces == "" {
+	if err := common.ValidateAuth(reg.GetAuth()); err != nil && options.Namespaces == "" {
 		return nil, nil, fmt.Errorf("quay.io supports no/empty auth information only for public/namespaced registries")
 	}
 
@@ -55,6 +55,7 @@ func (reg *QuayioRegistry) Catalog(ctx context.Context, pagination common.Pagina
 		// return res, common.CalcNextV2Pagination(res, pagination.Size), err
 	} else {
 		options.IsPublic = true
+
 	}
 
 	return reg.catalogQuayProprietery(pagination, options)
@@ -106,16 +107,14 @@ func (reg *QuayioRegistry) catalogQuayProprietery(pagination common.PaginationOp
 		return nil, nil, err
 	}
 	repositories := data.Transform(pagination.Size)
+	var pgn *common.PaginationOption = nil
 	for data.Cursor != "" {
-		pagination.Cursor = data.Cursor
-		data, err := reg.CatalogAux(pagination, options)
-		if err != nil {
-			return repositories, common.CalcNextV2Pagination(repositories, pagination.Size), fmt.Errorf("partial success, failed due to %s", err.Error())
-		}
+		pgn = &common.PaginationOption{Cursor: data.Cursor, Size: pagination.Size}
+
 		repositories = append(repositories, data.Transform(0)...)
 
 	}
-	return repositories, nil, nil
+	return repositories, pgn, nil
 }
 
 func (reg *QuayioRegistry) CatalogAux(pagination common.PaginationOption, options common.CatalogOption) (*QuayCatalogResponse, error) {
