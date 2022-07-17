@@ -36,11 +36,7 @@ func catalogOptionsToQuery(uri *url.URL, pagination common.PaginationOption, opt
 	return uri
 }
 func (reg *QuayioRegistry) Catalog(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption, authenticator authn.Authenticator) ([]string, *common.PaginationOption, error) {
-	if err := common.ValidateAuth(reg.GetAuth()); err != nil && options.Namespaces == "" {
-		return nil, nil, fmt.Errorf("quay.io supports no/empty auth information only for public/namespaced registries")
-	}
-
-	//auth part not working though w/o removing scope
+	//if quay is invalid we use it as public!!!!
 	if err := common.ValidateAuth(reg.GetAuth()); err == nil {
 		if authenticator == nil {
 			authenticator = authn.FromConfig(*reg.GetAuth())
@@ -48,11 +44,6 @@ func (reg *QuayioRegistry) Catalog(ctx context.Context, pagination common.Pagina
 
 		return reg.catalogQuayV2Auth(pagination, options)
 
-		// if err != nil {
-		// 	return nil, nil, err
-		// }
-		// fmt.Printf("%v", res)
-		// return res, common.CalcNextV2Pagination(res, pagination.Size), err
 	} else {
 		options.IsPublic = true
 
