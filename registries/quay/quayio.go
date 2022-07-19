@@ -19,8 +19,9 @@ func NewQuayIORegistry(auth *authn.AuthConfig, registry *name.Registry, registry
 	if registry.Name() == "" {
 		return nil, fmt.Errorf("must provide a non empty registry")
 	}
-
-	return &QuayioRegistry{DefaultRegistry: defaultregistry.DefaultRegistry{Registry: registry, Auth: auth}}, nil
+	reg := &QuayioRegistry{DefaultRegistry: defaultregistry.DefaultRegistry{Registry: registry, Auth: auth}}
+	reg.This = reg
+	return reg, nil
 
 }
 

@@ -25,7 +25,9 @@ func NewHarborRegistry(auth *authn.AuthConfig, registry *name.Registry, registry
 	if registry.Name() == "" {
 		return nil, fmt.Errorf("must provide a non empty registry")
 	}
-	return &HarborRegistry{DefaultRegistry: defaultregistry.DefaultRegistry{Registry: registry, Auth: auth, Cfg: registryCfg}}, nil
+	reg := &HarborRegistry{DefaultRegistry: defaultregistry.DefaultRegistry{Registry: registry, Auth: auth, Cfg: registryCfg}}
+	reg.This = reg
+	return reg, nil
 }
 
 type HarborRegistry struct {

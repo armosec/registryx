@@ -7,6 +7,8 @@ import (
 
 	"github.com/armosec/registryx/common"
 	"github.com/armosec/registryx/interfaces"
+	"github.com/google/go-containerregistry/pkg/authn"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
 )
 
 //NOT WORKING --- YET
@@ -61,7 +63,6 @@ func TestHarborAdminProject(t *testing.T) {
 	testHarbor(reg, t)
 }
 */
-
 func testHarbor(reg interfaces.IRegistry, t *testing.T) {
 	ctx := context.Background()
 	for repos, repoNextPage, err := reg.Catalog(ctx, common.MakePagination(1), common.CatalogOption{}, nil); err == nil; repos, repoNextPage, err = reg.Catalog(ctx, *repoNextPage, common.CatalogOption{}, nil) {
@@ -70,7 +71,12 @@ func testHarbor(reg interfaces.IRegistry, t *testing.T) {
 		}
 		fmt.Printf("repos: %v\n", repos)
 		for _, repoName := range repos {
-			//TODO change interface to accept name and do this stuff inside the reg
+			tags, err := reg.GetLatestTags(repoName, 10, remote.WithAuth(authn.FromConfig(*reg.GetAuth())))
+			if err != nil {
+				t.Errorf("%s", err.Error())
+			}
+			fmt.Printf("    %s latest tags: %v\n", repoName, tags)
+
 			fmt.Printf("  Repo :%s\n", repoName)
 			for tags, tagsNextPage, err := reg.List(repoName, common.MakePagination(1)); err == nil; tags, tagsNextPage, err = reg.List(repoName, *tagsNextPage) {
 				if err != nil {
