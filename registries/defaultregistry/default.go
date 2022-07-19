@@ -2,7 +2,10 @@ package defaultregistry
 
 import (
 	"context"
+	b64 "encoding/base64"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"sort"
 	"strings"
@@ -10,11 +13,14 @@ import (
 
 	"github.com/armosec/registryx/common"
 	"github.com/armosec/registryx/interfaces"
-	"github.com/armosec/registryx/registries/dockerregistry"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 )
+
+type CatalogV2Response struct {
+	Repositories []string `json:"repositories"`
+}
 
 // this is just a wrapper around the go-container & remote catalog
 type DefaultRegistry struct {
@@ -45,7 +51,7 @@ func (reg *DefaultRegistry) GetRegistry() *name.Registry {
 	return reg.Registry
 }
 
-func (reg *DefaultRegistry) getURL(urlSuffix string) *url.URL {
+func (reg *DefaultRegistry) GetURL(urlSuffix string) *url.URL {
 
 	return &url.URL{
 		Scheme: reg.Registry.Scheme(),
@@ -64,36 +70,55 @@ func (reg *DefaultRegistry) List(repoName string, pagination common.PaginationOp
 	return tags, nil, err
 }
 
+// this is the default catalog implementation uses remote(for now)
 func (reg *DefaultRegistry) Catalog(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption, authenticator authn.Authenticator) ([]string, *common.PaginationOption, error) {
-	regis := reg.GetRegistry().Name()
-	if regis == "index.docker.io" && authenticator == nil {
-		token, err := dockerregistry.Token(reg.GetAuth(), reg.GetRegistry())
-		if err != nil {
-			return nil, nil, err
-		}
-		if reg.Auth == nil {
-			reg.Auth = &authn.AuthConfig{}
-		}
-		reg.Auth.RegistryToken = token.Token
-	}
-	//auth part not working though w/o removing scope
+
 	if err := common.ValidateAuth(reg.GetAuth()); err == nil {
-		// res, err := remote.CatalogPage(*reg.GetRegistry(), pagination.Cursor, pagination.Size, remote.WithAuth(authn.FromConfig(*reg.GetAuth())))
 		if authenticator == nil {
 			authenticator = authn.FromConfig(*reg.GetAuth())
 		}
-		res, err := remote.Catalog(ctx, *reg.GetRegistry(), remote.WithAuth(authenticator))
+		res, err := remote.CatalogPage(*reg.GetRegistry(), pagination.Cursor, pagination.Size, remote.WithAuth(authn.FromConfig(*reg.GetAuth())))
 		if err != nil {
 			return nil, nil, err
 		}
 		return res, nil, err
 	}
-	if regis == "index.docker.io" {
-		repos, err := remote.Catalog(ctx, *reg.GetRegistry(), remote.WithAuth(authn.FromConfig(*reg.GetAuth())))
-		return repos, nil, err
-	}
 	repos, err := remote.CatalogPage(*reg.GetRegistry(), pagination.Cursor, pagination.Size, remote.WithAuth(authn.Anonymous))
 	return repos, common.CalcNextV2Pagination(repos, pagination.Size), err
+}
+
+func (reg *DefaultRegistry) GetV2Token(client *http.Client, url string) (*common.V2TokenResponse, error) {
+	if reg.GetAuth() == nil {
+		return nil, fmt.Errorf("no authorization found")
+	}
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if reg.GetAuth().Username != "" && reg.GetAuth().Password != "" {
+		usrpwd := b64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", reg.GetAuth().Username, reg.GetAuth().Password)))
+		req.Header.Add("Authorization", fmt.Sprintf("Basic %s", usrpwd))
+	}
+
+	resp, err := client.Do(req)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+
+	token := &common.V2TokenResponse{}
+
+	if err := json.NewDecoder(resp.Body).Decode(token); err != nil {
+		return nil, err
+	}
+
+	if token.Token == "" {
+		return nil, fmt.Errorf("recieved an empty token")
+	}
+	return token, nil
 }
 
 //GetLatestTags returns the latest tags for a given repository in descending order by the image creation time
