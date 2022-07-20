@@ -16,6 +16,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	version "github.com/hashicorp/go-version"
 )
 
 type CatalogV2Response struct {
@@ -133,12 +134,11 @@ func (reg *DefaultRegistry) GetLatestTags(repoName string, depth int, options ..
 		}
 		for _, tag := range tagsPage {
 			imageName := fmt.Sprintf("%s/%s:%s", reg.Registry.Name(), repoName, tag)
-
+			//get image descriptor for each tag
 			ref, err := name.ParseReference(imageName)
 			if err != nil {
 				return nil, err
 			}
-
 			image, err := remote.Image(ref, options...)
 			if err != nil {
 				return nil, err
@@ -148,26 +148,57 @@ func (reg *DefaultRegistry) GetLatestTags(repoName string, depth int, options ..
 				return nil, err
 			}
 			digestString := imageDigest.String()
+
+			//check for existing tags for this image
 			if existingImage := tagsInfos.getByDigest(digestString); existingImage != nil {
 				existingImage.tags = append(existingImage.tags, tag)
-			} else {
+			} else { //not tags info for this image so create one
 				cf, err := image.ConfigFile()
 				if err != nil {
 					return nil, err
 				}
 				tagsInfos = append(tagsInfos, &tagInfo{tags: []string{tag}, created: cf.Created.Time, digest: digestString})
-
 			}
-
 		}
 
-		sort.Slice(tagsInfos, func(i, j int) bool {
-			return tagsInfos[i].created.After(tagsInfos[j].created)
-		})
+		//cut off the list if we have reached the depth
 		if len(tagsInfos) > depth {
 			tagsInfos = tagsInfos[:depth]
 		}
+		//sort the list by creation time
+		sort.Slice(tagsInfos, func(i, j int) bool {
+			return tagsInfos[i].created.After(tagsInfos[j].created)
+		})
 
+		//sort multiple tags on a single image by version if possible otherwise sort by alphabetical order
+		for _, tagInfo := range tagsInfos {
+			sort.Slice(tagInfo.tags, func(i, j int) bool {
+				//latest always comes first
+				if tagInfo.tags[i] == "latest" {
+					return true
+				}
+				if tagInfo.tags[j] == "latest" {
+					return false
+				}
+				//try to parse the version
+				vi, erri := version.NewVersion(tagInfo.tags[i])
+				vj, errj := version.NewVersion(tagInfo.tags[j])
+				if erri == nil && errj == nil {
+					return vj.LessThan(vi)
+				}
+				if erri != nil && errj != nil {
+					//no version so sort alphabetically
+					return strings.ToLower(tagInfo.tags[i]) > strings.ToLower(tagInfo.tags[j])
+				}
+				//advance versions over non-versions
+				if erri == nil {
+					return true
+				}
+				return false
+			})
+		}
+
+		//if no next page then we are done
 		if nextPage == nil {
 			break
 		}
