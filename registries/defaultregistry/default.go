@@ -127,7 +127,7 @@ func (reg *DefaultRegistry) GetV2Token(client *http.Client, url string) (*common
 func (reg *DefaultRegistry) GetLatestTags(repoName string, depth int, options ...remote.Option) ([]string, error) {
 
 	tagsInfos := tagsInfo{}
-	for tagsPage, nextPage, err := reg.This.List(repoName, common.MakePagination(100), options...); ; tagsPage, nextPage, err = reg.This.List(repoName, *nextPage, options...) {
+	for tagsPage, nextPage, err := reg.This.List(repoName, common.MakePagination(reg.This.GetMaxPageSize()), options...); ; tagsPage, nextPage, err = reg.This.List(repoName, *nextPage, options...) {
 		if err != nil {
 			return nil, err
 		}
