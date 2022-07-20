@@ -1,6 +1,7 @@
 package defaultregistry
 
 import (
+	"bytes"
 	"context"
 	b64 "encoding/base64"
 	"encoding/json"
@@ -11,11 +12,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/armosec/gojay"
 	"github.com/armosec/registryx/common"
 	"github.com/armosec/registryx/interfaces"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/google/go-containerregistry/pkg/v1/types"
 	version "github.com/hashicorp/go-version"
 )
 
@@ -134,74 +137,59 @@ func (reg *DefaultRegistry) GetLatestTags(repoName string, depth int, options ..
 		}
 		for _, tag := range tagsPage {
 			imageName := fmt.Sprintf("%s/%s:%s", reg.Registry.Name(), repoName, tag)
-			//get image descriptor for each tag
-			ref, err := name.ParseReference(imageName)
+			digest, created, err := reg.getImageDigestAndCreationTime(imageName, options...)
 			if err != nil {
 				return nil, err
 			}
-			image, err := remote.Image(ref, options...)
-			if err != nil {
-				return nil, err
-			}
-			imageDigest, err := image.Digest()
-			if err != nil {
-				return nil, err
-			}
-			digestString := imageDigest.String()
 
 			//check for existing tags for this image
-			if existingImage := tagsInfos.getByDigest(digestString); existingImage != nil {
+			if existingImage := tagsInfos.getByDigest(digest); existingImage != nil {
 				existingImage.tags = append(existingImage.tags, tag)
 			} else { //not tags info for this image so create one
-				cf, err := image.ConfigFile()
-				if err != nil {
-					return nil, err
-				}
-				tagsInfos = append(tagsInfos, &tagInfo{tags: []string{tag}, created: cf.Created.Time, digest: digestString})
-			}
-		}
 
-		//cut off the list if we have reached the depth
-		if len(tagsInfos) > depth {
-			tagsInfos = tagsInfos[:depth]
+				tagsInfos = append(tagsInfos, &tagInfo{tags: []string{tag}, created: created, digest: digest})
+			}
 		}
 		//sort the list by creation time
 		sort.Slice(tagsInfos, func(i, j int) bool {
 			return tagsInfos[i].created.After(tagsInfos[j].created)
 		})
-
-		//sort multiple tags on a single image by version if possible otherwise sort by alphabetical order
-		for _, tagInfo := range tagsInfos {
-			sort.Slice(tagInfo.tags, func(i, j int) bool {
-				//latest always comes first
-				if tagInfo.tags[i] == "latest" {
-					return true
-				}
-				if tagInfo.tags[j] == "latest" {
-					return false
-				}
-				//try to parse the version
-				vi, erri := version.NewVersion(tagInfo.tags[i])
-				vj, errj := version.NewVersion(tagInfo.tags[j])
-				if erri == nil && errj == nil {
-					return vj.LessThan(vi)
-				}
-				if erri != nil && errj != nil {
-					//no version so sort alphabetically
-					return strings.ToLower(tagInfo.tags[i]) > strings.ToLower(tagInfo.tags[j])
-				}
-				//advance versions over non-versions
-				if erri == nil {
-					return true
-				}
-				return false
-			})
+		//cut off the list tail if we have reached the depth
+		if len(tagsInfos) > depth {
+			tagsInfos = tagsInfos[:depth]
 		}
-
 		//if no next page then we are done
 		if nextPage == nil {
 			break
 		}
+	}
+
+	//sort multiple tags on a single image by version if possible otherwise sort by sematic version otherwise sort alphabetically
+	for _, tagInfo := range tagsInfos {
+		sort.Slice(tagInfo.tags, func(i, j int) bool {
+			//latest always comes first
+			if tagInfo.tags[i] == "latest" {
+				return true
+			}
+			if tagInfo.tags[j] == "latest" {
+				return false
+			}
+			//try to parse the version
+			vi, erri := version.NewVersion(tagInfo.tags[i])
+			vj, errj := version.NewVersion(tagInfo.tags[j])
+			if erri == nil && errj == nil {
+				return vj.LessThan(vi)
+			}
+			if erri != nil && errj != nil {
+				//no version so sort alphabetically
+				return strings.ToLower(tagInfo.tags[i]) > strings.ToLower(tagInfo.tags[j])
+			}
+			//advance versions over non-versions
+			if erri == nil {
+				return true
+			}
+			return false
+		})
 	}
 	tags := []string{}
 	for _, tagInfo := range tagsInfos {
@@ -209,6 +197,126 @@ func (reg *DefaultRegistry) GetLatestTags(repoName string, depth int, options ..
 	}
 	return tags, nil
 
+}
+
+func (reg *DefaultRegistry) getImageDigestAndCreationTime(imageName string, options ...remote.Option) (string, time.Time, error) {
+	ref, err := name.ParseReference(imageName)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	desc, err := remote.Get(ref, options...)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+
+	//first try to covert to image - this works only for schema v2
+	if image, err := desc.Image(); err == nil {
+		imageDigest, err := image.Digest()
+		if err != nil {
+			return "", time.Time{}, err
+		}
+		digestString := imageDigest.String()
+		cf, err := image.ConfigFile()
+		if err != nil {
+			return "", time.Time{}, err
+		}
+		return digestString, cf.Created.Time, nil
+	} else if strings.Contains(err.Error(), "unsupported MediaType") && (desc.MediaType == types.DockerManifestSchema1 || desc.MediaType == types.DockerManifestSchema1Signed) {
+		//v1 schema need to parse the manifest
+		rawManifest, err := desc.RawManifest()
+		if err != nil {
+			return "", time.Time{}, err
+		}
+		manifest, err := decodeV1Mafinset(rawManifest)
+		if err != nil {
+			return "", time.Time{}, err
+		}
+		if len(manifest.history) == 0 {
+			return "", time.Time{}, fmt.Errorf("failed to parse v1 manifest history")
+		}
+		return desc.Digest.String(), manifest.history[0].v1Compatibility.created, nil
+	} else {
+		//unknown schema
+		return "", time.Time{}, err
+	}
+}
+
+type history []shortV1HistoryObj
+type shortV1Manifest struct {
+	history history
+}
+
+type shortV1HistoryObj struct {
+	v1Compatibility shortV1Compatibility
+}
+type shortV1Compatibility struct {
+	created time.Time
+}
+
+func (m *shortV1Manifest) UnmarshalJSONObject(dec *gojay.Decoder, key string) (err error) {
+
+	if key == "history" {
+		m.history = history{}
+		err = dec.DecodeArray(&m.history)
+	}
+	return err
+}
+
+func (r *shortV1Manifest) NKeys() int {
+	return 1
+}
+
+func (h *history) UnmarshalJSONArray(dec *gojay.Decoder) error {
+	v1HistoryObj := shortV1HistoryObj{}
+	if err := dec.Object(&v1HistoryObj); err != nil {
+		return err
+	}
+	*h = append(*h, v1HistoryObj)
+	return nil
+}
+func (n *history) NKeys() int {
+	return 0
+}
+
+func (ho *shortV1HistoryObj) UnmarshalJSONObject(dec *gojay.Decoder, key string) (err error) {
+	if key == "v1Compatibility" {
+		var v1CompatibilityStr string
+		err = dec.String(&v1CompatibilityStr)
+		if err != nil {
+			return err
+		}
+		v1Compatibility := shortV1Compatibility{}
+		if err := gojay.NewDecoder(bytes.NewReader([]byte(v1CompatibilityStr))).DecodeObject(&v1Compatibility); err != nil && !strings.Contains(err.Error(), "EOF") {
+			return err
+		}
+		ho.v1Compatibility = v1Compatibility
+	}
+	return err
+}
+func (r *shortV1HistoryObj) NKeys() int {
+	return 1
+}
+func (v1Comp *shortV1Compatibility) UnmarshalJSONObject(dec *gojay.Decoder, key string) (err error) {
+	if key == "created" {
+		var createdStr string
+		err = dec.String(&createdStr)
+		if err == nil {
+			v1Comp.created, err = time.Parse(time.RFC3339, createdStr)
+		}
+	}
+	return err
+}
+
+func (n *shortV1Compatibility) NKeys() int {
+	return 1
+}
+
+func decodeV1Mafinset(raw []byte) (*shortV1Manifest, error) {
+	manifest := shortV1Manifest{}
+	if err := gojay.NewDecoder(bytes.NewReader(raw)).DecodeObject(&manifest); err != nil && !strings.Contains(err.Error(), "EOF") {
+		return nil, err
+	}
+	return &manifest, nil
 }
 
 type tagInfo struct {
