@@ -5,6 +5,7 @@ go 1.18
 require (
 	github.com/armosec/gojay v1.2.15
 	github.com/google/go-containerregistry v0.10.0
+	github.com/hashicorp/go-version v1.2.1
 )
 
 require (
