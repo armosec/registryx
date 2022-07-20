@@ -27,6 +27,10 @@ func NewQuayIORegistry(auth *authn.AuthConfig, registry *name.Registry, registry
 
 }
 
+func (reg *QuayioRegistry) GetMaxPageSize() int {
+	return 0
+}
+
 type QuayioRegistry struct {
 	defaultregistry.DefaultRegistry
 	HTTPClient *http.Client

@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/armosec/registryx/common"
 	"github.com/armosec/registryx/registries/defaultregistry"
@@ -62,16 +63,28 @@ func (reg *QuayioRegistry) catalogQuayV2Auth(pagination common.PaginationOption,
 	reg.GetAuth().RegistryToken = token.Token
 	uri := reg.DefaultRegistry.GetURL("_catalog")
 	q := uri.Query()
-	if pagination.Cursor != "" {
-		q.Add("last", pagination.Cursor)
-	}
+
 	if pagination.Size > 0 {
 		q.Add("n", fmt.Sprintf("%d", pagination.Size))
+	}
+	if pagination.Cursor != "" {
+		q.Add("last", pagination.Cursor)
 	}
 	uri.RawQuery = q.Encode()
 	req, err := http.NewRequest(http.MethodGet, uri.String(), nil)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	if pagination.Cursor != "" {
+		url := uri.String()
+		if strings.HasPrefix(url, "https://") {
+			url = strings.ReplaceAll(url, "https://", "")
+		} else {
+			url = strings.ReplaceAll(url, "http://", "")
+		}
+
+		req.Header.Add("Link", fmt.Sprintf("<%s>; rel=next", url))
 	}
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", token.Token))
 	resp, err := reg.HTTPClient.Do(req)

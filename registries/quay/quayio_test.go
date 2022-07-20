@@ -39,8 +39,15 @@ func TestSimpleNoAuth(t *testing.T) {
 
 // 	quayio, err := NewQuayIORegistry(&authn.AuthConfig{Username: "", Password: ""}, &registry, common.MakeRegistryOptions(false, false, false, "quay.io", "", "", common.Quay))
 // 	ctx := context.Background()
-// 	data, _, err := quayio.Catalog(ctx, common.NoPaginationOption(), common.CatalogOption{Namespaces: "armosec"}, nil)
+// 	data, _, err := quayio.Catalog(ctx, common.MakePagination(quayio.GetMaxPageSize()), common.CatalogOption{Namespaces: "armosec"}, nil)
 // 	assert.Nil(t, err, "")
+// 	//TODO: fix pagination: https://docs.docker.com/registry/spec/api/
+// 	// for pgn != nil {
+// 	// 	data, pgn, err = quayio.Catalog(ctx, *pgn, common.CatalogOption{Namespaces: "armosec"}, nil)
+// 	// 	assert.Nil(t, err, "")
+// 	// 	all = append(all, data...)
+
+// 	// }
 // 	assert.NotEqual(t, len(data), 0, "received an empty results")
 // 	assert.Nil(t, err, "failed to create repo data")
 // 	fullRepoName := quayio.GetRegistry().Name() + "/" + data[0]
