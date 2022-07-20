@@ -31,6 +31,10 @@ func TestSimpleNoAuth(t *testing.T) {
 	imagestags, err := remote.List(repo_data, remote.WithAuth(authn.Anonymous))
 	assert.Nil(t, err, "failed to list image tags")
 	assert.NotEmpty(t, imagestags, fmt.Errorf("expected tags for %s", fullRepoName))
+
+	latestTags, err := quayio.GetLatestTags(repo, 5, remote.WithAuth(authn.Anonymous))
+	assert.Nil(t, err, "failed to get latest image tags")
+	assert.NotEmpty(t, latestTags, fmt.Errorf("expected tags for %s", fullRepoName))
 }
 
 // func TestSimpleAuth(t *testing.T) {

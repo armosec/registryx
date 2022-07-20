@@ -22,9 +22,10 @@ func NewQuayIORegistry(auth *authn.AuthConfig, registry *name.Registry, registry
 		return nil, fmt.Errorf("must provide a non empty registry")
 	}
 
-	return &QuayioRegistry{HTTPClient: &http.Client{Timeout: time.Duration(150) * time.Second},
-		DefaultRegistry: defaultregistry.DefaultRegistry{Registry: registry, Auth: auth}}, nil
-
+	reg := &QuayioRegistry{HTTPClient: &http.Client{Timeout: time.Duration(150) * time.Second},
+		DefaultRegistry: defaultregistry.DefaultRegistry{Registry: registry, Auth: auth}}
+	reg.This = reg
+	return reg, nil
 }
 
 func (reg *QuayioRegistry) GetMaxPageSize() int {
