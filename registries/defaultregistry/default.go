@@ -26,17 +26,18 @@ type CatalogV2Response struct {
 
 // this is just a wrapper around the go-container & remote catalog
 type DefaultRegistry struct {
-	Registry *name.Registry
-	Auth     *authn.AuthConfig
-	Cfg      *common.RegistryOptions
-	This     interfaces.IRegistry
+	Registry   *name.Registry
+	Auth       *authn.AuthConfig
+	Cfg        *common.RegistryOptions
+	This       interfaces.IRegistry
+	HTTPClient *http.Client
 }
 
 func NewRegistry(auth *authn.AuthConfig, registry *name.Registry, registryCfg *common.RegistryOptions) (interfaces.IRegistry, error) {
 	if registry.Name() == "" {
 		return nil, fmt.Errorf("must provide a non empty registry")
 	}
-	reg := &DefaultRegistry{Auth: auth, Registry: registry, Cfg: registryCfg}
+	reg := &DefaultRegistry{Auth: auth, Registry: registry, Cfg: registryCfg, HTTPClient: &http.Client{Timeout: time.Duration(150) * time.Second}}
 	reg.This = reg
 	return reg, nil
 
@@ -74,12 +75,11 @@ func (reg *DefaultRegistry) List(repoName string, pagination common.PaginationOp
 
 // this is the default catalog implementation uses remote(for now)
 func (reg *DefaultRegistry) Catalog(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption, authenticator authn.Authenticator) ([]string, *common.PaginationOption, error) {
-
 	if err := common.ValidateAuth(reg.GetAuth()); err == nil {
 		if authenticator == nil {
 			authenticator = authn.FromConfig(*reg.GetAuth())
 		}
-		res, err := remote.CatalogPage(*reg.GetRegistry(), pagination.Cursor, pagination.Size, remote.WithAuth(authn.FromConfig(*reg.GetAuth())))
+		res, _, err := reg.CatalogPage(ctx, pagination, options, authenticator)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -87,6 +87,67 @@ func (reg *DefaultRegistry) Catalog(ctx context.Context, pagination common.Pagin
 	}
 	repos, err := remote.CatalogPage(*reg.GetRegistry(), pagination.Cursor, pagination.Size, remote.WithAuth(authn.Anonymous))
 	return repos, common.CalcNextV2Pagination(repos, pagination.Size), err
+}
+
+// Build http req and append password / token as bearer token
+// See https://cloud.google.com/container-registry/docs/advanced-authentication#token
+func (reg *DefaultRegistry) gcrCatalogPage(pagination common.PaginationOption, options common.CatalogOption) ([]string, *common.PaginationOption, error) {
+	uri := reg.GetURL("_catalog")
+	q := uri.Query()
+
+	if pagination.Size > 0 {
+		q.Add("n", fmt.Sprintf("%d", pagination.Size))
+	}
+	if pagination.Cursor != "" {
+		q.Add("last", pagination.Cursor)
+	}
+	uri.RawQuery = q.Encode()
+	req, err := http.NewRequest(http.MethodGet, uri.String(), nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	if pagination.Cursor != "" {
+		url := uri.String()
+		if strings.HasPrefix(url, "https://") {
+			url = strings.ReplaceAll(url, "https://", "")
+		} else {
+			url = strings.ReplaceAll(url, "http://", "")
+		}
+
+		req.Header.Add("Link", fmt.Sprintf("<%s>; rel=next", url))
+	}
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", reg.GetAuth().Password))
+	resp, err := reg.HTTPClient.Do(req)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	defer resp.Body.Close()
+	repos := &CatalogV2Response{}
+	if err := json.NewDecoder(resp.Body).Decode(repos); err != nil {
+		return nil, nil, err
+	}
+	pgn := &common.PaginationOption{Size: pagination.Size}
+	if len(repos.Repositories) > 0 && pagination.Size > 0 {
+		pgn.Cursor = repos.Repositories[len(repos.Repositories)-1]
+	}
+
+	return repos.Repositories, pgn, nil
+}
+
+func (reg *DefaultRegistry) CatalogPage(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption, authenticator authn.Authenticator) ([]string, *common.PaginationOption, error) {
+	var repos []string
+	var err error
+	var pgn *common.PaginationOption
+	switch provider := getRegistryProvider(reg.Registry.RegistryStr()); provider {
+	case "gcr":
+		repos, pgn, err = reg.gcrCatalogPage(pagination, options)
+	default:
+		repos, err = remote.CatalogPage(*reg.GetRegistry(), pagination.Cursor, pagination.Size, remote.WithAuth(authenticator))
+		pgn = common.CalcNextV2Pagination(repos, pagination.Size)
+	}
+	return repos, pgn, err
+
 }
 
 func (reg *DefaultRegistry) GetV2Token(client *http.Client, url string) (*common.V2TokenResponse, error) {
@@ -253,4 +314,14 @@ func (ti tagsInfo) getByDigest(digest string) *tagInfo {
 		}
 	}
 	return nil
+}
+
+func getRegistryProvider(registryName string) string {
+	if strings.Contains(registryName, ".dkr.ecr") {
+		return "ecr"
+	}
+	if strings.Contains(registryName, "gcr.io") {
+		return "gcr"
+	}
+	return ""
 }
