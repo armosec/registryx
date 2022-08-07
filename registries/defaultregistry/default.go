@@ -26,17 +26,18 @@ type CatalogV2Response struct {
 
 // this is just a wrapper around the go-container & remote catalog
 type DefaultRegistry struct {
-	Registry *name.Registry
-	Auth     *authn.AuthConfig
-	Cfg      *common.RegistryOptions
-	This     interfaces.IRegistry
+	Registry   *name.Registry
+	Auth       *authn.AuthConfig
+	Cfg        *common.RegistryOptions
+	This       interfaces.IRegistry
+	HTTPClient *http.Client
 }
 
 func NewRegistry(auth *authn.AuthConfig, registry *name.Registry, registryCfg *common.RegistryOptions) (interfaces.IRegistry, error) {
 	if registry.Name() == "" {
 		return nil, fmt.Errorf("must provide a non empty registry")
 	}
-	reg := &DefaultRegistry{Auth: auth, Registry: registry, Cfg: registryCfg}
+	reg := &DefaultRegistry{Auth: auth, Registry: registry, Cfg: registryCfg, HTTPClient: &http.Client{Timeout: time.Duration(150) * time.Second}}
 	reg.This = reg
 	return reg, nil
 
@@ -105,7 +106,6 @@ func (reg *DefaultRegistry) gcrCatalogPage(pagination common.PaginationOption, o
 	if err != nil {
 		return nil, nil, err
 	}
-	client := &http.Client{}
 	if pagination.Cursor != "" {
 		url := uri.String()
 		if strings.HasPrefix(url, "https://") {
@@ -117,7 +117,7 @@ func (reg *DefaultRegistry) gcrCatalogPage(pagination common.PaginationOption, o
 		req.Header.Add("Link", fmt.Sprintf("<%s>; rel=next", url))
 	}
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", reg.GetAuth().Password))
-	resp, err := client.Do(req)
+	resp, err := reg.HTTPClient.Do(req)
 	if err != nil {
 		return nil, nil, err
 	}
