@@ -197,6 +197,8 @@ func (reg *DefaultRegistry) GetLatestTags(repoName string, depth int, options ..
 	}
 	tagsInfos := tagsInfo{}
 	wg := sync.WaitGroup{}
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	defer cancelCtx()
 	for tagsPage, nextPage, err := reg.This.List(repoName, common.MakePagination(reg.This.GetMaxPageSize()), options...); ; tagsPage, nextPage, err = reg.This.List(repoName, *nextPage, options...) {
 		if err != nil {
 			return nil, err
@@ -211,11 +213,12 @@ func (reg *DefaultRegistry) GetLatestTags(repoName string, depth int, options ..
 			go func(ch chan<- imageInfo, tag string, wg *sync.WaitGroup) {
 				defer wg.Done()
 				digest, created, err := reg.getImageInfo(repoName, tag, options)
-				if err != nil {
-					ch <- imageInfo{err: err}
+				select {
+				case <-ctx.Done():
+					return
+				case ch <- imageInfo{created: created, digest: digest, tag: tag, err: err}:
 					return
 				}
-				ch <- imageInfo{created: created, digest: digest, tag: tag}
 			}(ch, tag, &wg)
 		}
 
@@ -251,6 +254,9 @@ func (reg *DefaultRegistry) GetLatestTags(repoName string, depth int, options ..
 
 	//sort multiple tags on a single image by version if possible otherwise sort by sematic version otherwise sort alphabetically
 	for _, tagInfo := range tagsInfos {
+		if len(tagInfo.tags) == 1 {
+			continue
+		}
 		sort.Slice(tagInfo.tags, func(i, j int) bool {
 			//latest always comes first
 			if tagInfo.tags[i] == "latest" {
