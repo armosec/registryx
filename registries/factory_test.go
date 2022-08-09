@@ -9,6 +9,7 @@ import (
 	"github.com/armosec/registryx/interfaces"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/stretchr/testify/assert"
 )
 
 // //NOT WORKING --- YET
@@ -88,4 +89,29 @@ func testHarbor(reg interfaces.IRegistry, t *testing.T) {
 			break
 		}
 	}
+}
+
+func TestManyTags(t *testing.T) {
+	reg, err := Factory(nil, "quay.io", common.MakeRegistryOptions(false, false, false, "", "", "armosec", common.Quay))
+	if err != nil {
+		t.Errorf(" failed to create registry %s", err.Error())
+	}
+	tags, err := reg.GetLatestTags("armosec/kubescape", 50, remote.WithAuth(authn.Anonymous))
+	if err != nil {
+		t.Errorf("failed to get latest tags %s", err.Error())
+	}
+	assert.Equal(t, 50, len(tags))
+}
+
+func TestManyTagsWithOneDepth(t *testing.T) {
+	reg, err := Factory(nil, "quay.io", common.MakeRegistryOptions(false, false, false, "", "", "armosec", common.Quay))
+	if err != nil {
+		t.Errorf(" failed to create registry %s", err.Error())
+	}
+	tags, err := reg.GetLatestTags("armosec/kubescape", 1, remote.WithAuth(authn.Anonymous))
+	if err != nil {
+		t.Errorf("failed to get latest tags %s", err.Error())
+	}
+	assert.Equal(t, 1, len(tags))
+	assert.Equal(t, "latest", tags[0])
 }

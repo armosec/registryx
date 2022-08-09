@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/armosec/registryx/common"
@@ -188,25 +189,50 @@ func (reg *DefaultRegistry) GetV2Token(client *http.Client, url string) (*common
 //multiple tags on a single image will be sent as a comma separated string
 //e.g ["latest,v3" ,"v2", "v1"]
 func (reg *DefaultRegistry) GetLatestTags(repoName string, depth int, options ...remote.Option) ([]string, error) {
-
+	type imageInfo struct {
+		created time.Time
+		digest  string
+		tag     string
+		err     error
+	}
 	tagsInfos := tagsInfo{}
+	wg := sync.WaitGroup{}
 	for tagsPage, nextPage, err := reg.This.List(repoName, common.MakePagination(reg.This.GetMaxPageSize()), options...); ; tagsPage, nextPage, err = reg.This.List(repoName, *nextPage, options...) {
 		if err != nil {
 			return nil, err
 		}
+		ch := make(chan imageInfo, len(tagsPage))
 		for _, tag := range tagsPage {
-			imageName := fmt.Sprintf("%s/%s:%s", reg.Registry.Name(), repoName, tag)
-			digest, created, err := reg.getImageDigestAndCreationTime(imageName, options...)
-			if err != nil {
-				return nil, err
+			//if depth is one (default) and latest tag found no need to continue
+			if tag == "latest" && depth == 1 {
+				return []string{tag}, nil
 			}
+			wg.Add(1)
+			go func(ch chan<- imageInfo, tag string, wg *sync.WaitGroup) {
+				defer wg.Done()
+				digest, created, err := reg.getImageInfo(repoName, tag, options)
+				if err != nil {
+					ch <- imageInfo{err: err}
+					return
+				}
+				ch <- imageInfo{created: created, digest: digest, tag: tag}
+			}(ch, tag, &wg)
+		}
 
-			//check for existing tags for this image
-			if existingImage := tagsInfos.getByDigest(digest); existingImage != nil {
-				existingImage.tags = append(existingImage.tags, tag)
-			} else { //not tags info for this image so create one
+		go func(ch chan imageInfo, wg *sync.WaitGroup) {
+			wg.Wait()
+			close(ch)
+		}(ch, &wg)
 
-				tagsInfos = append(tagsInfos, &tagInfo{tags: []string{tag}, created: created, digest: digest})
+		for info := range ch {
+			if info.err != nil {
+				return nil, info.err
+			}
+			//check if the image already collected with different tag
+			if existingImage := tagsInfos.getByDigest(info.digest); existingImage != nil {
+				existingImage.tags = append(existingImage.tags, info.tag)
+			} else { //new image add it with the tag
+				tagsInfos = append(tagsInfos, &tagInfo{tags: []string{info.tag}, created: info.created, digest: info.digest})
 			}
 		}
 		//sort the list by creation time
@@ -256,6 +282,15 @@ func (reg *DefaultRegistry) GetLatestTags(repoName string, depth int, options ..
 	}
 	return tags, nil
 
+}
+
+func (reg *DefaultRegistry) getImageInfo(repoName string, tag string, options []remote.Option) (string, time.Time, error) {
+	imageName := fmt.Sprintf("%s/%s:%s", reg.Registry.Name(), repoName, tag)
+	digest, created, err := reg.getImageDigestAndCreationTime(imageName, options...)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	return digest, created, nil
 }
 
 func (reg *DefaultRegistry) getImageDigestAndCreationTime(imageName string, options ...remote.Option) (string, time.Time, error) {
