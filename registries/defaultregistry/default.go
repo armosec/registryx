@@ -209,8 +209,8 @@ func (reg *DefaultRegistry) GetLatestTags(repoName string, depth int, options ..
 			return []string{"latest"}, nil
 		}
 
-		ch := make(chan imageInfo, 30)
 		tagsChunks := split2Chunks(30, tagsPage)
+		ch := make(chan imageInfo, len(tagsChunks))
 		for _, tags := range tagsChunks {
 			wg.Add(1)
 			go func(ch chan<- imageInfo, tags []string, wg *sync.WaitGroup) {
@@ -312,7 +312,7 @@ func split2Chunks[T any](maxNumOfChunks int, slice []T) [][]T {
 	return divided
 }
 
-func (reg *DefaultRegistry) getImageDigestAndCreationTime(imageName string, options ...remote.Option) (string, time.Time, error) {
+func (*DefaultRegistry) getImageDigestAndCreationTime(imageName string, options ...remote.Option) (string, time.Time, error) {
 	ref, err := name.ParseReference(imageName)
 	if err != nil {
 		return "", time.Time{}, err
