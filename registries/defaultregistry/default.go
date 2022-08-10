@@ -213,7 +213,8 @@ func (reg *DefaultRegistry) GetLatestTags(repoName string, depth int, options ..
 			wg.Add(1)
 			go func(ch chan<- imageInfo, tag string, wg *sync.WaitGroup) {
 				defer wg.Done()
-				digest, created, err := reg.getImageInfo(repoName, tag, options)
+				imageName := fmt.Sprintf("%s/%s:%s", reg.Registry.Name(), repoName, tag)
+				digest, created, err := reg.getImageDigestAndCreationTime(imageName, options...)
 				select {
 				case <-ctx.Done():
 					return
@@ -289,15 +290,6 @@ func (reg *DefaultRegistry) GetLatestTags(repoName string, depth int, options ..
 	}
 	return tags, nil
 
-}
-
-func (reg *DefaultRegistry) getImageInfo(repoName string, tag string, options []remote.Option) (string, time.Time, error) {
-	imageName := fmt.Sprintf("%s/%s:%s", reg.Registry.Name(), repoName, tag)
-	digest, created, err := reg.getImageDigestAndCreationTime(imageName, options...)
-	if err != nil {
-		return "", time.Time{}, err
-	}
-	return digest, created, nil
 }
 
 func (reg *DefaultRegistry) getImageDigestAndCreationTime(imageName string, options ...remote.Option) (string, time.Time, error) {
