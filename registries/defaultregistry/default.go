@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/armosec/registryx/common"
@@ -18,6 +19,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 	version "github.com/hashicorp/go-version"
+	"k8s.io/utils/strings/slices"
 )
 
 type CatalogV2Response struct {
@@ -188,25 +190,57 @@ func (reg *DefaultRegistry) GetV2Token(client *http.Client, url string) (*common
 //multiple tags on a single image will be sent as a comma separated string
 //e.g ["latest,v3" ,"v2", "v1"]
 func (reg *DefaultRegistry) GetLatestTags(repoName string, depth int, options ...remote.Option) ([]string, error) {
-
+	type imageInfo struct {
+		created time.Time
+		digest  string
+		tag     string
+		err     error
+	}
 	tagsInfos := tagsInfo{}
+	wg := sync.WaitGroup{}
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	defer cancelCtx()
 	for tagsPage, nextPage, err := reg.This.List(repoName, common.MakePagination(reg.This.GetMaxPageSize()), options...); ; tagsPage, nextPage, err = reg.This.List(repoName, *nextPage, options...) {
 		if err != nil {
 			return nil, err
 		}
-		for _, tag := range tagsPage {
-			imageName := fmt.Sprintf("%s/%s:%s", reg.Registry.Name(), repoName, tag)
-			digest, created, err := reg.getImageDigestAndCreationTime(imageName, options...)
-			if err != nil {
-				return nil, err
+		//if depth is one (default) and latest tag found no need to continue
+		if depth == 1 && slices.Contains(tagsPage, "latest") {
+			return []string{"latest"}, nil
+		}
+
+		tagsChunks := split2Chunks(30, tagsPage)
+		ch := make(chan imageInfo, len(tagsChunks))
+		for _, tags := range tagsChunks {
+			wg.Add(1)
+			go func(ch chan<- imageInfo, tags []string, wg *sync.WaitGroup) {
+				defer wg.Done()
+				for _, tag := range tags {
+					imageName := fmt.Sprintf("%s/%s:%s", reg.Registry.Name(), repoName, tag)
+					digest, created, err := reg.getImageDigestAndCreationTime(imageName, options...)
+					select {
+					case <-ctx.Done():
+						return
+					case ch <- imageInfo{created: created, digest: digest, tag: tag, err: err}:
+					}
+				}
+			}(ch, tags, &wg)
+		}
+
+		go func(ch chan imageInfo, wg *sync.WaitGroup) {
+			wg.Wait()
+			close(ch)
+		}(ch, &wg)
+
+		for info := range ch {
+			if info.err != nil {
+				return nil, info.err
 			}
-
-			//check for existing tags for this image
-			if existingImage := tagsInfos.getByDigest(digest); existingImage != nil {
-				existingImage.tags = append(existingImage.tags, tag)
-			} else { //not tags info for this image so create one
-
-				tagsInfos = append(tagsInfos, &tagInfo{tags: []string{tag}, created: created, digest: digest})
+			//check if the image already collected with different tag
+			if existingImage := tagsInfos.getByDigest(info.digest); existingImage != nil {
+				existingImage.tags = append(existingImage.tags, info.tag)
+			} else { //new image add it with the tag
+				tagsInfos = append(tagsInfos, &tagInfo{tags: []string{info.tag}, created: info.created, digest: info.digest})
 			}
 		}
 		//sort the list by creation time
@@ -225,6 +259,9 @@ func (reg *DefaultRegistry) GetLatestTags(repoName string, depth int, options ..
 
 	//sort multiple tags on a single image by version if possible otherwise sort by sematic version otherwise sort alphabetically
 	for _, tagInfo := range tagsInfos {
+		if len(tagInfo.tags) == 1 {
+			continue
+		}
 		sort.Slice(tagInfo.tags, func(i, j int) bool {
 			//latest always comes first
 			if tagInfo.tags[i] == "latest" {
@@ -258,7 +295,24 @@ func (reg *DefaultRegistry) GetLatestTags(repoName string, depth int, options ..
 
 }
 
-func (reg *DefaultRegistry) getImageDigestAndCreationTime(imageName string, options ...remote.Option) (string, time.Time, error) {
+func split2Chunks[T any](maxNumOfChunks int, slice []T) [][]T {
+	var divided [][]T
+	if len(slice) <= maxNumOfChunks {
+		for _, v := range slice {
+			divided = append(divided, []T{v})
+		}
+		return divided
+	}
+
+	for i := 0; i < maxNumOfChunks; i++ {
+		min := (i * len(slice) / maxNumOfChunks)
+		max := ((i + 1) * len(slice)) / maxNumOfChunks
+		divided = append(divided, slice[min:max])
+	}
+	return divided
+}
+
+func (*DefaultRegistry) getImageDigestAndCreationTime(imageName string, options ...remote.Option) (string, time.Time, error) {
 	ref, err := name.ParseReference(imageName)
 	if err != nil {
 		return "", time.Time{}, err
