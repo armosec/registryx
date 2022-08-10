@@ -208,20 +208,23 @@ func (reg *DefaultRegistry) GetLatestTags(repoName string, depth int, options ..
 		if depth == 1 && slices.Contains(tagsPage, "latest") {
 			return []string{"latest"}, nil
 		}
-		ch := make(chan imageInfo, len(tagsPage))
-		for _, tag := range tagsPage {
+
+		ch := make(chan imageInfo, 30)
+		tagsChunks := split2Chunks(30, tagsPage)
+		for _, tags := range tagsChunks {
 			wg.Add(1)
-			go func(ch chan<- imageInfo, tag string, wg *sync.WaitGroup) {
+			go func(ch chan<- imageInfo, tags []string, wg *sync.WaitGroup) {
 				defer wg.Done()
-				imageName := fmt.Sprintf("%s/%s:%s", reg.Registry.Name(), repoName, tag)
-				digest, created, err := reg.getImageDigestAndCreationTime(imageName, options...)
-				select {
-				case <-ctx.Done():
-					return
-				case ch <- imageInfo{created: created, digest: digest, tag: tag, err: err}:
-					return
+				for _, tag := range tags {
+					imageName := fmt.Sprintf("%s/%s:%s", reg.Registry.Name(), repoName, tag)
+					digest, created, err := reg.getImageDigestAndCreationTime(imageName, options...)
+					select {
+					case <-ctx.Done():
+						return
+					case ch <- imageInfo{created: created, digest: digest, tag: tag, err: err}:
+					}
 				}
-			}(ch, tag, &wg)
+			}(ch, tags, &wg)
 		}
 
 		go func(ch chan imageInfo, wg *sync.WaitGroup) {
@@ -290,6 +293,23 @@ func (reg *DefaultRegistry) GetLatestTags(repoName string, depth int, options ..
 	}
 	return tags, nil
 
+}
+
+func split2Chunks[T any](maxNumOfChunks int, slice []T) [][]T {
+	var divided [][]T
+	if len(slice) <= maxNumOfChunks {
+		for _, v := range slice {
+			divided = append(divided, []T{v})
+		}
+		return divided
+	}
+
+	for i := 0; i < maxNumOfChunks; i++ {
+		min := (i * len(slice) / maxNumOfChunks)
+		max := ((i + 1) * len(slice)) / maxNumOfChunks
+		divided = append(divided, slice[min:max])
+	}
+	return divided
 }
 
 func (reg *DefaultRegistry) getImageDigestAndCreationTime(imageName string, options ...remote.Option) (string, time.Time, error) {
