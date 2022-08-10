@@ -19,6 +19,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 	version "github.com/hashicorp/go-version"
+	"k8s.io/utils/strings/slices"
 )
 
 type CatalogV2Response struct {
@@ -203,12 +204,12 @@ func (reg *DefaultRegistry) GetLatestTags(repoName string, depth int, options ..
 		if err != nil {
 			return nil, err
 		}
+		//if depth is one (default) and latest tag found no need to continue
+		if depth == 1 && slices.Contains(tagsPage, "latest") {
+			return []string{"latest"}, nil
+		}
 		ch := make(chan imageInfo, len(tagsPage))
 		for _, tag := range tagsPage {
-			//if depth is one (default) and latest tag found no need to continue
-			if tag == "latest" && depth == 1 {
-				return []string{tag}, nil
-			}
 			wg.Add(1)
 			go func(ch chan<- imageInfo, tag string, wg *sync.WaitGroup) {
 				defer wg.Done()
