@@ -108,7 +108,7 @@ func (reg *QuayioRegistry) catalogQuayV2Auth(pagination common.PaginationOption,
 func (reg *QuayioRegistry) catalogQuayProprietery(pagination common.PaginationOption, options common.CatalogOption) ([]string, *common.PaginationOption, int, error) {
 	data, statusCode, err := reg.CatalogAux(pagination, options)
 	if err != nil {
-		return nil, nil, 0, err
+		return nil, nil, statusCode, err
 	}
 	repositories := data.Transform(pagination.Size)
 	var pgn *common.PaginationOption = nil

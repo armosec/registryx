@@ -84,19 +84,20 @@ func (reg *DefaultRegistry) Catalog(ctx context.Context, pagination common.Pagin
 			authenticator = authn.FromConfig(*reg.GetAuth())
 		}
 		res, _, statusCode, err := reg.CatalogPage(ctx, pagination, options, authenticator)
-		// for google's container registry error implementation
-		if transportError, ok := err.(*transport.Error); ok {
-			statusCode = transportError.StatusCode
-		}
 		if err != nil {
+			// for google's container registry error implementation
+			if transportError, ok := err.(*transport.Error); ok {
+				statusCode = transportError.StatusCode
+			}
 			return nil, nil, statusCode, err
 		}
 		return res, nil, statusCode, err
 	}
 	repos, err := remote.CatalogPage(*reg.GetRegistry(), pagination.Cursor, pagination.Size, remote.WithAuth(authn.Anonymous))
-	// for google's container registry error implementation
-	if transportError, ok := err.(*transport.Error); ok {
-		statusCode = transportError.StatusCode
+	if err != nil {
+		if transportError, ok := err.(*transport.Error); ok {
+			statusCode = transportError.StatusCode
+		}
 	}
 	return repos, common.CalcNextV2Pagination(repos, pagination.Size), statusCode, err
 }
