@@ -39,7 +39,7 @@ func (*HarborRegistry) GetMaxPageSize() int {
 	return 100
 }
 
-func (h *HarborRegistry) Catalog(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption, authenticator authn.Authenticator) ([]string, *common.PaginationOption, error) {
+func (h *HarborRegistry) Catalog(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption, authenticator authn.Authenticator) ([]string, *common.PaginationOption, int, error) {
 	//if first pagination request set the page number (cursor) to 1
 	if len(pagination.Cursor) == 0 {
 		pagination.Cursor = "1"
@@ -47,37 +47,37 @@ func (h *HarborRegistry) Catalog(ctx context.Context, pagination common.Paginati
 		//ensure pagination Cursor is a number
 		_, err := strconv.Atoi(pagination.Cursor)
 		if err != nil {
-			return nil, nil, fmt.Errorf("invalid pagination, cursor must be an integer")
+			return nil, nil, 0, fmt.Errorf("invalid pagination, cursor must be an integer")
 		}
 	}
 	//create list repos request
 	req, err := h.repositoriesRequest(strconv.Itoa(pagination.Size), pagination.Cursor)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 	//create client according to registry configuration
 	res, err := h.getClient().Do(req)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 
 	if err := transport.CheckError(res, http.StatusOK); err != nil {
-		return nil, nil, err
+		return nil, nil, res.StatusCode, err
 	}
 
 	defer res.Body.Close()
 
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, res.StatusCode, err
 	}
 	//decode the repositories names from the response
 	if repos, err := decodeObjectsNames(body); err != nil {
-		return nil, nil, err
+		return nil, nil, res.StatusCode, err
 	} else {
 		//get next pagination (can be nill if this is the last one)
 		nextPagination, err := getNextPageOption(res)
-		return repos, nextPagination, err
+		return repos, nextPagination, res.StatusCode, err
 	}
 }
 

@@ -17,6 +17,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 	version "github.com/hashicorp/go-version"
 	"k8s.io/utils/strings/slices"
@@ -76,24 +77,33 @@ func (reg *DefaultRegistry) List(repoName string, pagination common.PaginationOp
 }
 
 // this is the default catalog implementation uses remote(for now)
-func (reg *DefaultRegistry) Catalog(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption, authenticator authn.Authenticator) ([]string, *common.PaginationOption, error) {
+func (reg *DefaultRegistry) Catalog(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption, authenticator authn.Authenticator) ([]string, *common.PaginationOption, int, error) {
+	var statusCode int
 	if err := common.ValidateAuth(reg.GetAuth()); err == nil {
 		if authenticator == nil {
 			authenticator = authn.FromConfig(*reg.GetAuth())
 		}
-		res, _, err := reg.CatalogPage(ctx, pagination, options, authenticator)
-		if err != nil {
-			return nil, nil, err
+		res, _, statusCode, err := reg.CatalogPage(ctx, pagination, options, authenticator)
+		// for google's container registry error implementation
+		if transportError, ok := err.(*transport.Error); ok {
+			statusCode = transportError.StatusCode
 		}
-		return res, nil, err
+		if err != nil {
+			return nil, nil, statusCode, err
+		}
+		return res, nil, statusCode, err
 	}
 	repos, err := remote.CatalogPage(*reg.GetRegistry(), pagination.Cursor, pagination.Size, remote.WithAuth(authn.Anonymous))
-	return repos, common.CalcNextV2Pagination(repos, pagination.Size), err
+	// for google's container registry error implementation
+	if transportError, ok := err.(*transport.Error); ok {
+		statusCode = transportError.StatusCode
+	}
+	return repos, common.CalcNextV2Pagination(repos, pagination.Size), statusCode, err
 }
 
 // Build http req and append password / token as bearer token
 // See https://cloud.google.com/container-registry/docs/advanced-authentication#token
-func (reg *DefaultRegistry) gcrCatalogPage(pagination common.PaginationOption, options common.CatalogOption) ([]string, *common.PaginationOption, error) {
+func (reg *DefaultRegistry) gcrCatalogPage(pagination common.PaginationOption, options common.CatalogOption) ([]string, *common.PaginationOption, int, error) {
 	uri := reg.GetURL("_catalog")
 	q := uri.Query()
 
@@ -106,7 +116,7 @@ func (reg *DefaultRegistry) gcrCatalogPage(pagination common.PaginationOption, o
 	uri.RawQuery = q.Encode()
 	req, err := http.NewRequest(http.MethodGet, uri.String(), nil)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 	if pagination.Cursor != "" {
 		url := uri.String()
@@ -121,44 +131,45 @@ func (reg *DefaultRegistry) gcrCatalogPage(pagination common.PaginationOption, o
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", reg.GetAuth().Password))
 	resp, err := reg.HTTPClient.Do(req)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 
 	defer resp.Body.Close()
 	repos := &CatalogV2Response{}
 	if err := json.NewDecoder(resp.Body).Decode(repos); err != nil {
-		return nil, nil, err
+		return nil, nil, resp.StatusCode, err
 	}
 	pgn := &common.PaginationOption{Size: pagination.Size}
 	if len(repos.Repositories) > 0 && pagination.Size > 0 {
 		pgn.Cursor = repos.Repositories[len(repos.Repositories)-1]
 	}
 
-	return repos.Repositories, pgn, nil
+	return repos.Repositories, pgn, resp.StatusCode, nil
 }
 
-func (reg *DefaultRegistry) CatalogPage(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption, authenticator authn.Authenticator) ([]string, *common.PaginationOption, error) {
+func (reg *DefaultRegistry) CatalogPage(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption, authenticator authn.Authenticator) ([]string, *common.PaginationOption, int, error) {
 	var repos []string
 	var err error
+	var statusCode int
 	var pgn *common.PaginationOption
 	switch provider := getRegistryProvider(reg.Registry.RegistryStr()); provider {
 	case "gcr":
-		repos, pgn, err = reg.gcrCatalogPage(pagination, options)
+		repos, pgn, statusCode, err = reg.gcrCatalogPage(pagination, options)
 	default:
 		repos, err = remote.CatalogPage(*reg.GetRegistry(), pagination.Cursor, pagination.Size, remote.WithAuth(authenticator))
 		pgn = common.CalcNextV2Pagination(repos, pagination.Size)
 	}
-	return repos, pgn, err
+	return repos, pgn, statusCode, err
 
 }
 
-func (reg *DefaultRegistry) GetV2Token(client *http.Client, url string) (*common.V2TokenResponse, error) {
+func (reg *DefaultRegistry) GetV2Token(client *http.Client, url string) (*common.V2TokenResponse, int, error) {
 	if reg.GetAuth() == nil {
-		return nil, fmt.Errorf("no authorization found")
+		return nil, 0, fmt.Errorf("no authorization found")
 	}
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	if reg.GetAuth().Username != "" && reg.GetAuth().Password != "" {
@@ -169,7 +180,7 @@ func (reg *DefaultRegistry) GetV2Token(client *http.Client, url string) (*common
 	resp, err := client.Do(req)
 
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	defer resp.Body.Close()
@@ -177,18 +188,18 @@ func (reg *DefaultRegistry) GetV2Token(client *http.Client, url string) (*common
 	token := &common.V2TokenResponse{}
 
 	if err := json.NewDecoder(resp.Body).Decode(token); err != nil {
-		return nil, err
+		return nil, resp.StatusCode, err
 	}
 
 	if token.Token == "" {
-		return nil, fmt.Errorf("recieved an empty token")
+		return nil, resp.StatusCode, fmt.Errorf("recieved an empty token")
 	}
-	return token, nil
+	return token, resp.StatusCode, nil
 }
 
-//GetLatestTags returns the latest tags for a given repository in descending order by the image creation time
-//multiple tags on a single image will be sent as a comma separated string
-//e.g ["latest,v3" ,"v2", "v1"]
+// GetLatestTags returns the latest tags for a given repository in descending order by the image creation time
+// multiple tags on a single image will be sent as a comma separated string
+// e.g ["latest,v3" ,"v2", "v1"]
 func (reg *DefaultRegistry) GetLatestTags(repoName string, depth int, options ...remote.Option) ([]string, error) {
 	type imageInfo struct {
 		created time.Time
