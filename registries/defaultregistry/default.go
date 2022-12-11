@@ -157,6 +157,12 @@ func (reg *DefaultRegistry) CatalogPage(ctx context.Context, pagination common.P
 		repos, pgn, statusCode, err = reg.gcrCatalogPage(pagination, options)
 	default:
 		repos, err = remote.CatalogPage(*reg.GetRegistry(), pagination.Cursor, pagination.Size, remote.WithAuth(authenticator))
+		// for google's container registry error implementation
+		if err != nil {
+			if transportError, ok := err.(*transport.Error); ok {
+				statusCode = transportError.StatusCode
+			}
+		}
 		pgn = common.CalcNextV2Pagination(repos, pagination.Size)
 	}
 	return repos, pgn, statusCode, err
