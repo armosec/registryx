@@ -60,9 +60,13 @@ func (h *HarborRegistry) Catalog(ctx context.Context, pagination common.Paginati
 	if err != nil {
 		return nil, nil, 0, err
 	}
-
 	if err := transport.CheckError(res, http.StatusOK); err != nil {
-		return nil, nil, res.StatusCode, err
+		// for google's container registry error implementation
+		var statusCode int
+		if transportError, ok := err.(*transport.Error); ok {
+			statusCode = transportError.StatusCode
+		}
+		return nil, nil, statusCode, err
 	}
 
 	defer res.Body.Close()
