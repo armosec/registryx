@@ -62,7 +62,7 @@ func TestHarborAdminProject(t *testing.T) {
 */
 func testHarbor(reg interfaces.IRegistry, t *testing.T) {
 	ctx := context.Background()
-	for repos, repoNextPage, err := reg.Catalog(ctx, common.MakePagination(1), common.CatalogOption{}, nil); err == nil; repos, repoNextPage, err = reg.Catalog(ctx, *repoNextPage, common.CatalogOption{}, nil) {
+	for repos, repoNextPage, _, err := reg.Catalog(ctx, common.MakePagination(1), common.CatalogOption{}, nil); err == nil; repos, repoNextPage, _, err = reg.Catalog(ctx, *repoNextPage, common.CatalogOption{}, nil) {
 		if err != nil {
 			t.Errorf("%s", err.Error())
 		}

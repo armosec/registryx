@@ -10,7 +10,7 @@ import (
 )
 
 type IRegistry interface {
-	Catalog(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption, authenticator authn.Authenticator) (repositories []string, nextPage *common.PaginationOption, err error)
+	Catalog(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption, authenticator authn.Authenticator) (repositories []string, nextPage *common.PaginationOption, statusCode int, err error)
 	List(repoName string, pagination common.PaginationOption, options ...remote.Option) (tags []string, nextPagination *common.PaginationOption, err error)
 	GetLatestTags(repoName string, depth int, options ...remote.Option) (tags []string, err error)
 	GetAuth() *authn.AuthConfig
