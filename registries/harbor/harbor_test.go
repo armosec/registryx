@@ -41,9 +41,8 @@ func TestCatalogAndList(t *testing.T) {
 	assert.Nil(t, err)
 	ctx := context.Background()
 	//test catalog
-	repos, nextPage, statusCode, err := harbor.Catalog(ctx, common.NoPaginationOption(), common.CatalogOption{}, nil)
+	repos, nextPage, err := harbor.Catalog(ctx, common.NoPaginationOption(), common.CatalogOption{}, nil)
 	assert.Nil(t, nextPage)
-	assert.Equal(t, 200, statusCode)
 	assert.Nil(t, err)
 	assert.Equal(t, []string{"my-project/ca-ws", "user2private/kibana", "user-project/kibana", "my-project/kibana", "my-project/postgres"}, repos)
 	testServer.Close()
@@ -93,9 +92,9 @@ func TestCatalogAndListWithProjectAndPagination(t *testing.T) {
 		t.Error(err)
 	}
 	//test catalog
-	repos, nextReposPage, statusCode, err := harbor.Catalog(ctx, common.MakePagination(2), common.CatalogOption{}, nil)
+	repos, nextReposPage, err := harbor.Catalog(ctx, common.MakePagination(2), common.CatalogOption{}, nil)
 	assert.Nil(t, err)
-	assert.Equal(t, 200, statusCode)
+
 	assert.Equal(t, []string{"my-project/ca-ws", "my-project/kibana"}, repos)
 	assert.Equal(t, &common.PaginationOption{Cursor: "2", Size: 2}, nextReposPage)
 	testServer.Close()
@@ -111,9 +110,9 @@ func TestCatalogAndListWithProjectAndPagination(t *testing.T) {
 		t.Error(err)
 	}
 
-	_, nextReposPage, statusCode, err = harbor.Catalog(ctx, common.PaginationOption{Cursor: "2", Size: 1}, common.CatalogOption{}, nil)
+	_, nextReposPage, err = harbor.Catalog(ctx, common.PaginationOption{Cursor: "2", Size: 1}, common.CatalogOption{}, nil)
 	assert.Nil(t, err)
-	assert.Equal(t, 200, statusCode)
+
 	assert.Equal(t, &common.PaginationOption{Cursor: "3", Size: 1}, nextReposPage)
 	testServer.Close()
 
@@ -127,7 +126,7 @@ func TestCatalogAndListWithProjectAndPagination(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	_, nextReposPage, _, err = harbor.Catalog(ctx, common.PaginationOption{Cursor: "2", Size: 2}, common.CatalogOption{}, nil)
+	_, nextReposPage, err = harbor.Catalog(ctx, common.PaginationOption{Cursor: "2", Size: 2}, common.CatalogOption{}, nil)
 	assert.Nil(t, err)
 	assert.Nil(t, nextReposPage)
 	testServer.Close()

@@ -19,10 +19,9 @@ func TestSimpleNoAuth(t *testing.T) {
 
 	quayio, err := NewQuayIORegistry(nil, &registry, &common.RegistryOptions{})
 	ctx := context.Background()
-	repos, _, statusCode, err := quayio.Catalog(ctx, common.NoPaginationOption(), common.CatalogOption{IsPublic: true, Namespaces: "quay"}, nil)
+	repos, _, err := quayio.Catalog(ctx, common.NoPaginationOption(), common.CatalogOption{IsPublic: true, Namespaces: "quay"}, nil)
 	assert.Nil(t, err, "failed to catalog")
 	assert.NotEmpty(t, repos, "expected some returned images")
-	assert.Equal(t, 200, statusCode, "expected status code 200")
 
 	repo := repos[0]
 	fullRepoName := quayio.GetRegistry().Name() + "/" + repo
