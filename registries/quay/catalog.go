@@ -94,7 +94,7 @@ func (reg *QuayioRegistry) catalogQuayV2Auth(pagination common.PaginationOption,
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return nil, nil, fmt.Errorf("authentication error: got %v status code", resp.StatusCode)
 	}
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode > 399 {
 		return nil, nil, fmt.Errorf("error: got %v status code", resp.StatusCode)
 	}
 
@@ -143,7 +143,7 @@ func (reg *QuayioRegistry) CatalogAux(pagination common.PaginationOption, option
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return nil, fmt.Errorf("authentication error: got %v status code", resp.StatusCode)
 	}
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode > 399 {
 		return nil, fmt.Errorf("error: got %v status code", resp.StatusCode)
 	}
 	defer resp.Body.Close()

@@ -124,7 +124,7 @@ func (reg *DefaultRegistry) gcrCatalogPage(pagination common.PaginationOption, o
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return nil, nil, fmt.Errorf("authentication error: got %v status code", resp.StatusCode)
 	}
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode > 399 {
 		return nil, nil, fmt.Errorf("got %v status code", resp.StatusCode)
 	}
 
