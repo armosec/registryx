@@ -1,6 +1,6 @@
 module github.com/armosec/registryx
 
-go 1.18
+go 1.19
 
 require (
 	github.com/armosec/gojay v1.2.15
