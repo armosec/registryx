@@ -34,6 +34,11 @@ type HarborRegistry struct {
 	defaultregistry.DefaultRegistry
 }
 
+type RepositoryInfo struct {
+	registryName   string
+	repositoryName string
+}
+
 func (*HarborRegistry) GetMaxPageSize() int {
 	//Harbor limits page size to 100 elements
 	return 100
@@ -81,12 +86,9 @@ func (h *HarborRegistry) Catalog(ctx context.Context, pagination common.Paginati
 }
 
 func (h *HarborRegistry) List(repoName string, pagination common.PaginationOption, options ...remote.Option) ([]string, *common.PaginationOption, error) {
-	repo, err := common.MakeRepoWithRegistry(repoName, h.Registry)
-	if err != nil {
-		return nil, nil, err
-	}
+	repo := RepositoryInfo{registryName: h.Registry.RegistryStr(), repositoryName: repoName}
 	//create list tag request
-	req, err := h.listTagsRequest(*repo, strconv.Itoa(pagination.Size), pagination.Cursor)
+	req, err := h.listTagsRequest(repo, strconv.Itoa(pagination.Size), pagination.Cursor)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -217,11 +219,11 @@ func (h *HarborRegistry) repositoriesRequest(pageSize string, pageNum string) (*
 	return req, nil
 }
 
-func (h *HarborRegistry) listTagsRequest(repo name.Repository, size string, cursor string) (*http.Request, error) {
+func (h *HarborRegistry) listTagsRequest(repo RepositoryInfo, size string, cursor string) (*http.Request, error) {
 	uri := &url.URL{
 		Scheme: h.requestScheme(),
-		Host:   repo.Registry.RegistryStr(),
-		Path:   fmt.Sprintf("/v2/%s/tags/list", repo.RepositoryStr()),
+		Host:   repo.registryName,
+		Path:   fmt.Sprintf("/v2/%s/tags/list", repo.repositoryName),
 	}
 
 	if size != "0" {

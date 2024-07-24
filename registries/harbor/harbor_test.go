@@ -196,9 +196,8 @@ func TestInsecureRequest(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, "https", req.URL.Scheme)
 	//test list tags request scheme
-	repoData, err := name.NewRepository("repo")
-	assert.Nil(t, err)
-	repoData.Registry = registry
+	repoData := RepositoryInfo{repositoryName: "repo"}
+	repoData.registryName = registry.RegistryStr()
 	req, err = harbor.listTagsRequest(repoData, "0", "")
 	assert.Nil(t, err)
 	assert.Equal(t, "https", req.URL.Scheme)
@@ -217,9 +216,8 @@ func TestInsecureRequest(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, "http", req.URL.Scheme)
 	//test list tags request scheme
-	repoData, err = name.NewRepository("repo")
-	assert.Nil(t, err)
-	repoData.Registry = registry
+	repoData = RepositoryInfo{repositoryName: "repo"}
+	repoData.registryName = registry.RegistryStr()
 	req, err = harbor.listTagsRequest(repoData, "0", "")
 	assert.Nil(t, err)
 	assert.Equal(t, "http", req.URL.Scheme)
