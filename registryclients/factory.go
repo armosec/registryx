@@ -15,6 +15,12 @@ func GetRegistryClient(registry armotypes.ContainerImageRegistry) (interfaces.Re
 		} else {
 			return nil, fmt.Errorf("failed to convert registry to QuayImageRegistry type")
 		}
+	case armotypes.Harbor:
+		if harborRegistry, ok := registry.(*armotypes.HarborImageRegistry); ok {
+			return &HarborRegistryClient{Registry: harborRegistry}, nil
+		} else {
+			return nil, fmt.Errorf("failed to convert registry to HarborImageRegistry type")
+		}
 	}
 	return nil, fmt.Errorf("unsupported provider %s", provider)
 }
