@@ -4,7 +4,7 @@ go 1.23.0
 
 require (
 	github.com/Masterminds/semver/v3 v3.3.0
-	github.com/armosec/armoapi-go v0.0.474
+	github.com/armosec/armoapi-go v0.0.475
 	github.com/armosec/gojay v1.2.17
 	github.com/docker/docker v27.3.1+incompatible
 	github.com/google/go-containerregistry v0.20.2

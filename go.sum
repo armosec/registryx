@@ -18,8 +18,8 @@ github.com/BurntSushi/toml v1.2.1/go.mod h1:CxXYINrC8qIiEnFrOxCa7Jy5BFHlXnUU2pbi
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
 github.com/Masterminds/semver/v3 v3.3.0 h1:B8LGeaivUe71a5qox1ICM/JLl0NqZSW5CHyL+hmvYS0=
 github.com/Masterminds/semver/v3 v3.3.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
-github.com/armosec/armoapi-go v0.0.474 h1:gMvVk7Cd4OL6wQEhWZTMDhDuiifq32MeOZVPHE4YyBI=
-github.com/armosec/armoapi-go v0.0.474/go.mod h1:TruqDSAPgfRBXCeM+Cgp6nN4UhJSbe7la+XDKV2pTsY=
+github.com/armosec/armoapi-go v0.0.475 h1:VM8OcG+etjyHru4fvK8CSqgLWhlzry8ae46LRjSzdys=
+github.com/armosec/armoapi-go v0.0.475/go.mod h1:TruqDSAPgfRBXCeM+Cgp6nN4UhJSbe7la+XDKV2pTsY=
 github.com/armosec/gojay v1.2.17 h1:VSkLBQzD1c2V+FMtlGFKqWXNsdNvIKygTKJI9ysY8eM=
 github.com/armosec/gojay v1.2.17/go.mod h1:vuvX3DlY0nbVrJ0qCklSS733AWMoQboq3cFyuQW9ybc=
 github.com/armosec/utils-k8s-go v0.0.30 h1:Gj8MJck0jZPSLSq8ZMiRPT3F/laOYQdaLxXKKcjijt4=
