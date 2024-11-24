@@ -21,6 +21,12 @@ func GetRegistryClient(registry armotypes.ContainerImageRegistry) (interfaces.Re
 		} else {
 			return nil, fmt.Errorf("failed to convert registry to HarborImageRegistry type")
 		}
+	case armotypes.Google:
+		if googleRegistry, ok := registry.(*armotypes.GoogleImageRegistry); ok {
+			return NewGoogleArtifactRegistryClient(googleRegistry)
+		} else {
+			return nil, fmt.Errorf("failed to convert registry to GoogleImageRegistry type")
+		}
 	}
 	return nil, fmt.Errorf("unsupported provider %s", provider)
 }

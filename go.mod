@@ -4,11 +4,12 @@ go 1.23.0
 
 require (
 	github.com/Masterminds/semver/v3 v3.3.0
-	github.com/armosec/armoapi-go v0.0.467
+	github.com/armosec/armoapi-go v0.0.474
 	github.com/armosec/gojay v1.2.17
 	github.com/docker/docker v27.3.1+incompatible
 	github.com/google/go-containerregistry v0.20.2
 	github.com/hashicorp/go-version v1.7.0
+	golang.org/x/oauth2 v0.23.0
 	k8s.io/utils v0.0.0-20240502163921-fe8a2dddb1d0
 )
 
@@ -18,6 +19,7 @@ require (
 )
 
 require (
+	cloud.google.com/go/compute/metadata v0.5.2 // indirect
 	github.com/armosec/utils-k8s-go v0.0.30 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
@@ -27,7 +29,7 @@ require (
 	github.com/docker/cli v27.1.1+incompatible // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.7.0 // indirect
-	github.com/go-logr/logr v1.4.1 // indirect
+	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -50,7 +52,7 @@ require (
 	github.com/vbatts/tar-split v0.11.3 // indirect
 	golang.org/x/net v0.29.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect
-	golang.org/x/sys v0.25.0 // indirect
+	golang.org/x/sys v0.27.0 // indirect
 	golang.org/x/text v0.18.0 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
