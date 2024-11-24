@@ -49,9 +49,9 @@ func (q *QuayRegistryClient) GetImagesToScan(_ context.Context) (map[string]stri
 	return images, nil
 }
 
-func (q *QuayRegistryClient) GetDockerAuth() *dockerregistry.AuthConfig {
+func (q *QuayRegistryClient) GetDockerAuth() (*dockerregistry.AuthConfig, error) {
 	return &dockerregistry.AuthConfig{
 		Username: q.Registry.RobotAccountName,
 		Password: q.Registry.RobotAccountToken,
-	}
+	}, nil
 }

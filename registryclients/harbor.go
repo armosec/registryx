@@ -51,9 +51,9 @@ func (h *HarborRegistryClient) GetImagesToScan(_ context.Context) (map[string]st
 	return images, nil
 }
 
-func (h *HarborRegistryClient) GetDockerAuth() *dockerregistry.AuthConfig {
+func (h *HarborRegistryClient) GetDockerAuth() (*dockerregistry.AuthConfig, error) {
 	return &dockerregistry.AuthConfig{
 		Username: h.Registry.Username,
 		Password: h.Registry.Password,
-	}
+	}, nil
 }

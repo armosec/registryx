@@ -8,5 +8,5 @@ import (
 type RegistryClient interface {
 	GetAllRepositories(ctx context.Context) ([]string, error)
 	GetImagesToScan(ctx context.Context) (map[string]string, error)
-	GetDockerAuth() *dockerregistry.AuthConfig
+	GetDockerAuth() (*dockerregistry.AuthConfig, error)
 }
