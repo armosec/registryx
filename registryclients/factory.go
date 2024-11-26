@@ -27,6 +27,18 @@ func GetRegistryClient(registry armotypes.ContainerImageRegistry) (interfaces.Re
 		} else {
 			return nil, fmt.Errorf("failed to convert registry to GoogleImageRegistry type")
 		}
+	case armotypes.Azure:
+		if azureRegistry, ok := registry.(*armotypes.AzureImageRegistry); ok {
+			return &AzureRegistryClient{Registry: azureRegistry}, nil
+		} else {
+			return nil, fmt.Errorf("failed to convert registry to AzureImageRegistry type")
+		}
+	case armotypes.AWS:
+		if awsRegistry, ok := registry.(*armotypes.AWSImageRegistry); ok {
+			return NewAWSRegistryClient(awsRegistry)
+		} else {
+			return nil, fmt.Errorf("failed to convert registry to AWSImageRegistry type")
+		}
 	}
 	return nil, fmt.Errorf("unsupported provider %s", provider)
 }
