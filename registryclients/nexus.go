@@ -42,10 +42,10 @@ func (n *NexusRegistryClient) GetImagesToScan(_ context.Context) (map[string]str
 		tag, err := getImageLatestTag(repository, iRegistry)
 		if err != nil {
 			return nil, err
-		} else if tag == "" {
-			return nil, fmt.Errorf("failed to find latest tag for repository %s", repository)
 		}
-		images[fmt.Sprintf("%s/%s", n.Registry.RegistryURL, repository)] = tag
+		if tag != "" {
+			images[fmt.Sprintf("%s/%s", n.Registry.RegistryURL, repository)] = tag
+		}
 	}
 	return images, nil
 }
