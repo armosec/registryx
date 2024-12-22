@@ -43,10 +43,10 @@ func (h *HarborRegistryClient) GetImagesToScan(_ context.Context) (map[string]st
 		tag, err := getImageLatestTag(repository, iRegistry)
 		if err != nil {
 			return nil, err
-		} else if tag == "" {
-			return nil, fmt.Errorf("failed to find latest tag for repository %s", repository)
 		}
-		images[fmt.Sprintf("%s/%s", h.Registry.InstanceURL, repository)] = tag
+		if tag != "" {
+			images[fmt.Sprintf("%s/%s", h.Registry.InstanceURL, repository)] = tag
+		}
 	}
 	return images, nil
 }

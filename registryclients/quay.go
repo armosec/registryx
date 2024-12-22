@@ -41,10 +41,10 @@ func (q *QuayRegistryClient) GetImagesToScan(_ context.Context) (map[string]stri
 		tag, err := getImageLatestTag(repository, iRegistry)
 		if err != nil {
 			return nil, err
-		} else if tag == "" {
-			return nil, fmt.Errorf("failed to find latest tag for repository %s", repository)
 		}
-		images[fmt.Sprintf("%s/%s", q.Registry.ContainerRegistryName, repository)] = tag
+		if tag != "" {
+			images[fmt.Sprintf("%s/%s", q.Registry.ContainerRegistryName, repository)] = tag
+		}
 	}
 	return images, nil
 }
