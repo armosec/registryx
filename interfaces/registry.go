@@ -16,4 +16,5 @@ type IRegistry interface {
 	GetAuth() *authn.AuthConfig
 	GetRegistry() *name.Registry
 	GetMaxPageSize() int
+	SetMaxPageSize(maxPageSize int)
 }

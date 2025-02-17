@@ -3,6 +3,7 @@ package registryclients
 import (
 	"context"
 	"fmt"
+
 	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/registryx/common"
 	"github.com/armosec/registryx/registries/defaultregistry"
@@ -24,6 +25,8 @@ func (n *NexusRegistryClient) GetAllRepositories(ctx context.Context) ([]string,
 	if err != nil {
 		return nil, err
 	}
+
+	iRegistry.SetMaxPageSize(100)
 	return getAllRepositories(ctx, iRegistry)
 }
 
