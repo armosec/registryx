@@ -28,11 +28,12 @@ type CatalogV2Response struct {
 
 // this is just a wrapper around the go-container & remote catalog
 type DefaultRegistry struct {
-	Registry   *name.Registry
-	Auth       *authn.AuthConfig
-	Cfg        *common.RegistryOptions
-	This       interfaces.IRegistry
-	HTTPClient *http.Client
+	Registry    *name.Registry
+	Auth        *authn.AuthConfig
+	Cfg         *common.RegistryOptions
+	This        interfaces.IRegistry
+	HTTPClient  *http.Client
+	MaxPageSize *int
 }
 
 func NewRegistry(auth *authn.AuthConfig, registry *name.Registry, registryCfg *common.RegistryOptions) (interfaces.IRegistry, error) {
@@ -45,7 +46,14 @@ func NewRegistry(auth *authn.AuthConfig, registry *name.Registry, registryCfg *c
 
 }
 
+func (reg *DefaultRegistry) SetMaxPageSize(maxPageSize int) {
+	reg.MaxPageSize = &maxPageSize
+}
+
 func (reg *DefaultRegistry) GetMaxPageSize() int {
+	if reg.MaxPageSize != nil {
+		return *reg.MaxPageSize
+	}
 	return 1000
 }
 
@@ -81,8 +89,7 @@ func (reg *DefaultRegistry) Catalog(ctx context.Context, pagination common.Pagin
 		if authenticator == nil {
 			authenticator = authn.FromConfig(*reg.GetAuth())
 		}
-		res, _, err := reg.CatalogPage(ctx, pagination, options, authenticator)
-		return res, nil, err
+		return reg.CatalogPage(ctx, pagination, options, authenticator)
 	}
 	repos, err := remote.CatalogPage(*reg.GetRegistry(), pagination.Cursor, pagination.Size, remote.WithAuth(authn.Anonymous))
 
