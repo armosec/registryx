@@ -26,7 +26,7 @@ func (n *NexusRegistryClient) GetAllRepositories(ctx context.Context) ([]string,
 		return nil, err
 	}
 
-	iRegistry.SetMaxPageSize(100)
+	iRegistry.SetMaxPageSize(1000)
 	return getAllRepositories(ctx, iRegistry)
 }
 
