@@ -25,20 +25,21 @@ const (
 
 type AWSRegistryClient struct {
 	Registry    *armotypes.AWSImageRegistry
+	Options     *common.RegistryOptions
 	registryURI string
 	username    string
 	password    string
 }
 
-func NewAWSRegistryClient(registry *armotypes.AWSImageRegistry) (*AWSRegistryClient, error) {
+func NewAWSRegistryClient(registry *armotypes.AWSImageRegistry, options *common.RegistryOptions) (*AWSRegistryClient, error) {
 	if registry.AccessKeyID != "" && registry.SecretAccessKey != "" {
-		return newAWSRegistryClientUsingCredentials(registry, registry.AccessKeyID, registry.SecretAccessKey, registry.RegistryRegion)
+		return newAWSRegistryClientUsingCredentials(registry, registry.AccessKeyID, registry.SecretAccessKey, registry.RegistryRegion, options)
 	}
 
-	return newAWSRegistryClientUsingIAMRole(registry, registry.RoleARN, registry.RegistryRegion)
+	return newAWSRegistryClientUsingIAMRole(registry, registry.RoleARN, registry.RegistryRegion, options)
 }
 
-func newAWSRegistryClientUsingCredentials(registry *armotypes.AWSImageRegistry, accessKeyID, secretAccessKey, region string) (*AWSRegistryClient, error) {
+func newAWSRegistryClientUsingCredentials(registry *armotypes.AWSImageRegistry, accessKeyID, secretAccessKey, region string, options *common.RegistryOptions) (*AWSRegistryClient, error) {
 	cfg, err := config.LoadDefaultConfig(context.Background(),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKeyID, secretAccessKey, "")),
 		config.WithRegion(region),
@@ -47,10 +48,10 @@ func newAWSRegistryClientUsingCredentials(registry *armotypes.AWSImageRegistry, 
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
-	return newAWSRegistryClientUsingConfig(registry, cfg)
+	return newAWSRegistryClientUsingConfig(registry, cfg, options)
 }
 
-func newAWSRegistryClientUsingIAMRole(registry *armotypes.AWSImageRegistry, roleARN, region string) (*AWSRegistryClient, error) {
+func newAWSRegistryClientUsingIAMRole(registry *armotypes.AWSImageRegistry, roleARN, region string, options *common.RegistryOptions) (*AWSRegistryClient, error) {
 	cfg, err := config.LoadDefaultConfig(context.Background(),
 		config.WithRegion(region),
 	)
@@ -78,10 +79,10 @@ func newAWSRegistryClientUsingIAMRole(registry *armotypes.AWSImageRegistry, role
 		return nil, fmt.Errorf("failed to load AWS config with assumed role credentials: %w", err)
 	}
 
-	return newAWSRegistryClientUsingConfig(registry, assumeRoleCfg)
+	return newAWSRegistryClientUsingConfig(registry, assumeRoleCfg, options)
 }
 
-func newAWSRegistryClientUsingConfig(registry *armotypes.AWSImageRegistry, cfg aws.Config) (*AWSRegistryClient, error) {
+func newAWSRegistryClientUsingConfig(registry *armotypes.AWSImageRegistry, cfg aws.Config, options *common.RegistryOptions) (*AWSRegistryClient, error) {
 	stsClient := sts.NewFromConfig(cfg)
 	identity, err := stsClient.GetCallerIdentity(context.Background(), &sts.GetCallerIdentityInput{})
 	if err != nil {
@@ -117,6 +118,7 @@ func newAWSRegistryClientUsingConfig(registry *armotypes.AWSImageRegistry, cfg a
 		registryURI: fmt.Sprintf(registryURIFormat, *identity.Account, cfg.Region),
 		username:    username,
 		password:    password,
+		Options:     options,
 	}, nil
 }
 
@@ -125,7 +127,7 @@ func (a *AWSRegistryClient) GetAllRepositories(ctx context.Context) ([]string, e
 	if err != nil {
 		return nil, err
 	}
-	iRegistry, err := defaultregistry.NewRegistry(&authn.AuthConfig{Username: a.username, Password: a.password}, &registry, &common.RegistryOptions{})
+	iRegistry, err := defaultregistry.NewRegistry(&authn.AuthConfig{Username: a.username, Password: a.password}, &registry, a.Options)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +140,7 @@ func (a *AWSRegistryClient) GetImagesToScan(_ context.Context) (map[string]strin
 	if err != nil {
 		return nil, err
 	}
-	iRegistry, err := defaultregistry.NewRegistry(&authn.AuthConfig{Username: a.username, Password: a.password}, &registry, &common.RegistryOptions{})
+	iRegistry, err := defaultregistry.NewRegistry(&authn.AuthConfig{Username: a.username, Password: a.password}, &registry, a.Options)
 	if err != nil {
 		return nil, err
 	}

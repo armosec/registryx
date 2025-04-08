@@ -23,12 +23,13 @@ const (
 
 type GoogleArtifactRegistryClient struct {
 	Registry   *armotypes.GoogleImageRegistry
+	Options    *common.RegistryOptions
 	httpClient *http.Client
 	projectID  string
 	ts         oauth2.TokenSource
 }
 
-func NewGoogleArtifactRegistryClient(registry *armotypes.GoogleImageRegistry) (*GoogleArtifactRegistryClient, error) {
+func NewGoogleArtifactRegistryClient(registry *armotypes.GoogleImageRegistry, options *common.RegistryOptions) (*GoogleArtifactRegistryClient, error) {
 	jsonData, err := json.Marshal(registry.Key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal json key: %w", err)
@@ -40,6 +41,7 @@ func NewGoogleArtifactRegistryClient(registry *armotypes.GoogleImageRegistry) (*
 
 	return &GoogleArtifactRegistryClient{
 		Registry:   registry,
+		Options:    options,
 		httpClient: oauth2.NewClient(context.Background(), creds.TokenSource),
 		projectID:  creds.ProjectID,
 		ts:         creds.TokenSource,
@@ -55,7 +57,7 @@ func (g *GoogleArtifactRegistryClient) GetAllRepositories(ctx context.Context) (
 	if err != nil {
 		return nil, err
 	}
-	iRegistry, err := defaultregistry.NewRegistry(&authn.AuthConfig{Username: oauth2user, Password: token.AccessToken}, &registry, &common.RegistryOptions{})
+	iRegistry, err := defaultregistry.NewRegistry(&authn.AuthConfig{Username: oauth2user, Password: token.AccessToken}, &registry, g.Options)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +74,7 @@ func (g *GoogleArtifactRegistryClient) GetImagesToScan(_ context.Context) (map[s
 	if err != nil {
 		return nil, err
 	}
-	iRegistry, err := defaultregistry.NewRegistry(&authn.AuthConfig{Username: oauth2user, Password: token.AccessToken}, &registry, &common.RegistryOptions{})
+	iRegistry, err := defaultregistry.NewRegistry(&authn.AuthConfig{Username: oauth2user, Password: token.AccessToken}, &registry, g.Options)
 	if err != nil {
 		return nil, err
 	}
