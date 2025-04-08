@@ -13,6 +13,7 @@ import (
 
 type AzureRegistryClient struct {
 	Registry *armotypes.AzureImageRegistry
+	Options  *common.RegistryOptions
 }
 
 func (a *AzureRegistryClient) GetAllRepositories(ctx context.Context) ([]string, error) {
@@ -20,7 +21,7 @@ func (a *AzureRegistryClient) GetAllRepositories(ctx context.Context) ([]string,
 	if err != nil {
 		return nil, err
 	}
-	iRegistry, err := defaultregistry.NewRegistry(&authn.AuthConfig{Username: a.Registry.Username, Password: a.Registry.AccessToken}, &registry, &common.RegistryOptions{})
+	iRegistry, err := defaultregistry.NewRegistry(&authn.AuthConfig{Username: a.Registry.Username, Password: a.Registry.AccessToken}, &registry, a.Options)
 	if err != nil {
 		return nil, err
 	}
@@ -33,7 +34,7 @@ func (a *AzureRegistryClient) GetImagesToScan(_ context.Context) (map[string]str
 	if err != nil {
 		return nil, err
 	}
-	iRegistry, err := defaultregistry.NewRegistry(&authn.AuthConfig{Username: a.Registry.Username, Password: a.Registry.AccessToken}, &registry, &common.RegistryOptions{})
+	iRegistry, err := defaultregistry.NewRegistry(&authn.AuthConfig{Username: a.Registry.Username, Password: a.Registry.AccessToken}, &registry, a.Options)
 	if err != nil {
 		return nil, err
 	}

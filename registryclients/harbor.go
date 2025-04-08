@@ -13,6 +13,7 @@ import (
 
 type HarborRegistryClient struct {
 	Registry *armotypes.HarborImageRegistry
+	Options  *common.RegistryOptions
 }
 
 func (h *HarborRegistryClient) GetAllRepositories(ctx context.Context) ([]string, error) {
@@ -20,7 +21,7 @@ func (h *HarborRegistryClient) GetAllRepositories(ctx context.Context) ([]string
 	if err != nil {
 		return nil, err
 	}
-	iRegistry, err := harbor.NewHarborRegistry(&authn.AuthConfig{Username: h.Registry.Username, Password: h.Registry.Password}, &registry, &common.RegistryOptions{})
+	iRegistry, err := harbor.NewHarborRegistry(&authn.AuthConfig{Username: h.Registry.Username, Password: h.Registry.Password}, &registry, h.Options)
 	if err != nil {
 		return nil, err
 	}
@@ -33,7 +34,7 @@ func (h *HarborRegistryClient) GetImagesToScan(_ context.Context) (map[string]st
 	if err != nil {
 		return nil, err
 	}
-	iRegistry, err := harbor.NewHarborRegistry(&authn.AuthConfig{Username: h.Registry.Username, Password: h.Registry.Password}, &registry, &common.RegistryOptions{})
+	iRegistry, err := harbor.NewHarborRegistry(&authn.AuthConfig{Username: h.Registry.Username, Password: h.Registry.Password}, &registry, h.Options)
 	if err != nil {
 		return nil, err
 	}

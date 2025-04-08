@@ -14,6 +14,7 @@ import (
 
 type NexusRegistryClient struct {
 	Registry *armotypes.NexusImageRegistry
+	Options  *common.RegistryOptions
 }
 
 func (n *NexusRegistryClient) GetAllRepositories(ctx context.Context) ([]string, error) {
@@ -21,7 +22,7 @@ func (n *NexusRegistryClient) GetAllRepositories(ctx context.Context) ([]string,
 	if err != nil {
 		return nil, err
 	}
-	iRegistry, err := defaultregistry.NewRegistry(&authn.AuthConfig{Username: n.Registry.Username, Password: n.Registry.Password}, &registry, &common.RegistryOptions{})
+	iRegistry, err := defaultregistry.NewRegistry(&authn.AuthConfig{Username: n.Registry.Username, Password: n.Registry.Password}, &registry, n.Options)
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +36,7 @@ func (n *NexusRegistryClient) GetImagesToScan(_ context.Context) (map[string]str
 	if err != nil {
 		return nil, err
 	}
-	iRegistry, err := defaultregistry.NewRegistry(&authn.AuthConfig{Username: n.Registry.Username, Password: n.Registry.Password}, &registry, &common.RegistryOptions{})
+	iRegistry, err := defaultregistry.NewRegistry(&authn.AuthConfig{Username: n.Registry.Username, Password: n.Registry.Password}, &registry, n.Options)
 	if err != nil {
 		return nil, err
 	}
