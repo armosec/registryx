@@ -98,3 +98,13 @@ func (r *RegistryOptions) Insecure() bool {
 func (r *RegistryOptions) SkipTLSVerify() bool {
 	return r.skipTLSVerify
 }
+
+func (r *RegistryOptions) WithInsecure(insecure bool) *RegistryOptions {
+	r.insecure = insecure
+	return r
+}
+
+func (r *RegistryOptions) WithSkipTLSVerify(skipTLSVerify bool) *RegistryOptions {
+	r.skipTLSVerify = skipTLSVerify
+	return r
+}
