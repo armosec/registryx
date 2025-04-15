@@ -2,14 +2,15 @@ package registryclients
 
 import (
 	"context"
+	"slices"
+	"sort"
+	"strings"
+
 	"github.com/Masterminds/semver/v3"
 	"github.com/armosec/registryx/common"
 	"github.com/armosec/registryx/interfaces"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
-	"slices"
-	"sort"
-	"strings"
 )
 
 const (
@@ -75,11 +76,21 @@ func getImageLatestTag(repo string, registry interfaces.IRegistry) (string, erro
 
 func getLatestTag(tags []string) string {
 	var versions []*semver.Version
+	var nonSemverTags []string
 	for _, tag := range tags {
 		version, err := semver.NewVersion(tag)
 		if err == nil {
 			versions = append(versions, version)
+		} else {
+			nonSemverTags = append(nonSemverTags, tag)
 		}
+	}
+	if len(versions) == 0 {
+		if len(nonSemverTags) > 0 {
+			// we assume freestyle tags are already sorted
+			return nonSemverTags[len(nonSemverTags)-1]
+		}
+		return ""
 	}
 	sort.Sort(sort.Reverse(semver.Collection(versions)))
 	return versions[0].String()
