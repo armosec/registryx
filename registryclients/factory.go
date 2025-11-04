@@ -2,6 +2,7 @@ package registryclients
 
 import (
 	"fmt"
+
 	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/registryx/common"
 	"github.com/armosec/registryx/interfaces"
@@ -45,6 +46,12 @@ func GetRegistryClient(registry armotypes.ContainerImageRegistry, registryOption
 			return NewAWSRegistryClient(awsRegistry, registryOptions)
 		} else {
 			return nil, fmt.Errorf("failed to convert registry to AWSImageRegistry type")
+		}
+	case armotypes.Gitlab:
+		if gitlabRegistry, ok := registry.(*armotypes.GitlabImageRegistry); ok {
+			return &GitLabRegistryClient{Registry: gitlabRegistry, Options: registryOptions}, nil
+		} else {
+			return nil, fmt.Errorf("failed to convert registry to GitlabImageRegistry type")
 		}
 	}
 	return nil, fmt.Errorf("unsupported provider %s", provider)
