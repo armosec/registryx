@@ -22,7 +22,7 @@ func (g *GitLabRegistryClient) GetAllRepositories(ctx context.Context) ([]string
 	if err != nil {
 		return nil, err
 	}
-	iRegistry, err := defaultregistry.NewRegistry(&authn.AuthConfig{Username: g.Registry.Username, Password: g.Registry.Password}, &registry, g.Options)
+	iRegistry, err := defaultregistry.NewRegistry(&authn.AuthConfig{Username: g.Registry.Username, Password: g.Registry.AccessToken}, &registry, g.Options)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +36,7 @@ func (g *GitLabRegistryClient) GetImagesToScan(_ context.Context) (map[string]st
 	if err != nil {
 		return nil, err
 	}
-	iRegistry, err := defaultregistry.NewRegistry(&authn.AuthConfig{Username: g.Registry.Username, Password: g.Registry.Password}, &registry, g.Options)
+	iRegistry, err := defaultregistry.NewRegistry(&authn.AuthConfig{Username: g.Registry.Username, Password: g.Registry.AccessToken}, &registry, g.Options)
 	if err != nil {
 		return nil, err
 	}
@@ -57,6 +57,6 @@ func (g *GitLabRegistryClient) GetImagesToScan(_ context.Context) (map[string]st
 func (g *GitLabRegistryClient) GetDockerAuth() (*dockerregistry.AuthConfig, error) {
 	return &dockerregistry.AuthConfig{
 		Username: g.Registry.Username,
-		Password: g.Registry.Password,
+		Password: g.Registry.AccessToken,
 	}, nil
 }
