@@ -4,7 +4,7 @@ go 1.24.1
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
-	github.com/armosec/armoapi-go v0.0.641
+	github.com/armosec/armoapi-go v0.0.643
 	github.com/armosec/gojay v1.2.17
 	github.com/aws/aws-sdk-go-v2 v1.32.5
 	github.com/aws/aws-sdk-go-v2/config v1.28.5
