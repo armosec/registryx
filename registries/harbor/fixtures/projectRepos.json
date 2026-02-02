@@ -1,0 +1,20 @@
+[
+    {
+        "artifact_count": 4,
+        "creation_time": "2022-07-06T12:15:17.729Z",
+        "id": 5,
+        "name": "my-project/ca-ws",
+        "project_id": 2,
+        "pull_count": 8,
+        "update_time": "2022-07-07T10:02:35.987Z"
+    },
+    {
+        "artifact_count": 2,
+        "creation_time": "2022-07-06T01:23:44.983Z",
+        "id": 2,
+        "name": "my-project/kibana",
+        "project_id": 2,
+        "pull_count": 2,
+        "update_time": "2022-07-06T15:51:04.776Z"
+    }
+]

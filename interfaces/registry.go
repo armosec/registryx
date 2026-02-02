@@ -3,15 +3,18 @@ package interfaces
 import (
 	"context"
 
-	"github.com/LiorAlafiArmo/registryx/common"
+	"github.com/armosec/registryx/common"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
 )
 
 type IRegistry interface {
-	Catalog(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption, authenticator authn.Authenticator) ([]string, error)
-	// List()
-	// Tags()
+	Catalog(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption, authenticator authn.Authenticator) (repositories []string, nextPage *common.PaginationOption, err error)
+	List(repoName string, pagination common.PaginationOption, options ...remote.Option) (tags []string, nextPagination *common.PaginationOption, err error)
+	GetLatestTags(repoName string, depth int, options ...remote.Option) (tags []string, err error)
 	GetAuth() *authn.AuthConfig
 	GetRegistry() *name.Registry
+	GetMaxPageSize() int
+	SetMaxPageSize(maxPageSize int)
 }

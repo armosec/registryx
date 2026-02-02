@@ -6,11 +6,13 @@ see https://docs.quay.io/api/swagger/
 */
 import (
 	"fmt"
+	"net/http"
 	"net/url"
+	"time"
 
-	"github.com/LiorAlafiArmo/registryx/common"
-	"github.com/LiorAlafiArmo/registryx/interfaces"
-	"github.com/LiorAlafiArmo/registryx/registries/defaultregistry"
+	"github.com/armosec/registryx/common"
+	"github.com/armosec/registryx/interfaces"
+	"github.com/armosec/registryx/registries/defaultregistry"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 )
@@ -20,12 +22,19 @@ func NewQuayIORegistry(auth *authn.AuthConfig, registry *name.Registry, registry
 		return nil, fmt.Errorf("must provide a non empty registry")
 	}
 
-	return &QuayioRegistry{DefaultRegistry: defaultregistry.DefaultRegistry{Registry: registry, Auth: auth}}, nil
+	reg := &QuayioRegistry{HTTPClient: &http.Client{Timeout: time.Duration(150) * time.Second},
+		DefaultRegistry: defaultregistry.DefaultRegistry{Registry: registry, Auth: auth}}
+	reg.This = reg
+	return reg, nil
+}
 
+func (reg *QuayioRegistry) GetMaxPageSize() int {
+	return 0
 }
 
 type QuayioRegistry struct {
 	defaultregistry.DefaultRegistry
+	HTTPClient *http.Client
 }
 
 func (reg *QuayioRegistry) GetAuth() *authn.AuthConfig {

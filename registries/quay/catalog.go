@@ -7,10 +7,11 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strings"
 
-	"github.com/LiorAlafiArmo/registryx/common"
+	"github.com/armosec/registryx/common"
+	"github.com/armosec/registryx/registries/defaultregistry"
 	"github.com/google/go-containerregistry/pkg/authn"
-	"github.com/google/go-containerregistry/pkg/v1/remote"
 )
 
 func catalogOptionsToQuery(uri *url.URL, pagination common.PaginationOption, options common.CatalogOption) *url.URL {
@@ -35,40 +36,95 @@ func catalogOptionsToQuery(uri *url.URL, pagination common.PaginationOption, opt
 
 	return uri
 }
-func (reg *QuayioRegistry) Catalog(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption, authenticator authn.Authenticator) ([]string, error) {
-	if err := common.ValidateAuth(reg.GetAuth()); err != nil && !options.IsPublic && options.Namespaces == "" {
-		return nil, fmt.Errorf("quay.io supports no/empty auth information only for public/namespaced registries")
-	}
-
-	//auth part not working though w/o removing scope
+func (reg *QuayioRegistry) Catalog(ctx context.Context, pagination common.PaginationOption, options common.CatalogOption, authenticator authn.Authenticator) ([]string, *common.PaginationOption, error) {
+	//if quay is invalid we use it as public!!!!
 	if err := common.ValidateAuth(reg.GetAuth()); err == nil {
 		if authenticator == nil {
 			authenticator = authn.FromConfig(*reg.GetAuth())
 		}
-		res, err := remote.CatalogPage(*reg.GetRegistry(), pagination.Cursor, pagination.Size, remote.WithAuth(authenticator))
-		if err != nil {
-			return nil, err
-		}
-		fmt.Printf("%v", res)
-		return res, err
+
+		return reg.catalogQuayV2Auth(pagination, options)
+
+	} else {
+		options.IsPublic = true
+
 	}
 
-	// req = req.WithContext(ctx)
+	return reg.catalogQuayProprietery(pagination, options)
+}
+
+func (reg *QuayioRegistry) catalogQuayV2Auth(pagination common.PaginationOption, options common.CatalogOption) ([]string, *common.PaginationOption, error) {
+
+	//Token Request
+	token, err := reg.GetV2Token(reg.HTTPClient, AUTH_URL)
+	if err != nil {
+		return nil, nil, err
+	}
+	reg.GetAuth().RegistryToken = token.Token
+	uri := reg.DefaultRegistry.GetURL("_catalog")
+	q := uri.Query()
+
+	if pagination.Size > 0 {
+		q.Add("n", fmt.Sprintf("%d", pagination.Size))
+	}
+	if pagination.Cursor != "" {
+		q.Add("last", pagination.Cursor)
+	}
+	uri.RawQuery = q.Encode()
+	req, err := http.NewRequest(http.MethodGet, uri.String(), nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if pagination.Cursor != "" {
+		url := uri.String()
+		if strings.HasPrefix(url, "https://") {
+			url = strings.ReplaceAll(url, "https://", "")
+		} else {
+			url = strings.ReplaceAll(url, "http://", "")
+		}
+
+		req.Header.Add("Link", fmt.Sprintf("<%s>; rel=next", url))
+	}
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", token.Token))
+	resp, err := reg.HTTPClient.Do(req)
+	if err != nil {
+		return nil, nil, err
+	}
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return nil, nil, fmt.Errorf("authentication error: got %v status code", resp.StatusCode)
+	}
+	if resp.StatusCode > 399 {
+		return nil, nil, fmt.Errorf("error: got %v status code", resp.StatusCode)
+	}
+
+	defer resp.Body.Close()
+	repos := &defaultregistry.CatalogV2Response{}
+	if err := json.NewDecoder(resp.Body).Decode(repos); err != nil {
+		return nil, nil, err
+	}
+	pgn := &common.PaginationOption{Size: pagination.Size}
+	if len(repos.Repositories) > 0 && pagination.Size > 0 {
+		pgn.Cursor = repos.Repositories[len(repos.Repositories)-1]
+	}
+
+	return repos.Repositories, pgn, nil
+}
+
+func (reg *QuayioRegistry) catalogQuayProprietery(pagination common.PaginationOption, options common.CatalogOption) ([]string, *common.PaginationOption, error) {
 	data, err := reg.CatalogAux(pagination, options)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	repositories := data.Transform(pagination.Size)
-	for data.Cursor != "" {
-		pagination.Cursor = data.Cursor
-		data, err := reg.CatalogAux(pagination, options)
-		if err != nil {
-			return repositories, fmt.Errorf("partial success, failed due to %s", err.Error())
-		}
+	var pgn *common.PaginationOption = nil
+	if data.Cursor != "" {
+		pgn = &common.PaginationOption{Cursor: data.Cursor, Size: pagination.Size}
+
 		repositories = append(repositories, data.Transform(0)...)
 
 	}
-	return repositories, nil
+	return repositories, pgn, nil
 }
 
 func (reg *QuayioRegistry) CatalogAux(pagination common.PaginationOption, options common.CatalogOption) (*QuayCatalogResponse, error) {
@@ -83,6 +139,12 @@ func (reg *QuayioRegistry) CatalogAux(pagination common.PaginationOption, option
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
+	}
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return nil, fmt.Errorf("authentication error: got %v status code", resp.StatusCode)
+	}
+	if resp.StatusCode > 399 {
+		return nil, fmt.Errorf("error: got %v status code", resp.StatusCode)
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
