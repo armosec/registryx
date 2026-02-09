@@ -200,7 +200,7 @@ func TestGitLabRegistryClient_getGitLabAPIBaseURL(t *testing.T) {
 		},
 		// --- Host with gitlab in name (contains "gitlab" -> use as-is, no prepend) ---
 		{
-			name:        "Host ends with gitlab - contains gitlab, use as-is",
+			name:        "Host contains gitlab - use as-is",
 			registryURL: "mygitlab.example.com",
 			want:        "https://mygitlab.example.com/api/v4",
 		},
