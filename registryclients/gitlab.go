@@ -63,16 +63,17 @@ func (g *GitLabRegistryClient) getRepositoriesFromGitLabAPI(ctx context.Context)
 }
 
 func (g *GitLabRegistryClient) getGitLabAPIBaseURL() string {
-	raw := g.Registry.RegistryURL
-	if !strings.HasPrefix(strings.ToLower(raw), "https://") && !strings.HasPrefix(strings.ToLower(raw), "http://") {
-		raw = "https://" + raw
+	trimmed := strings.TrimSpace(g.Registry.RegistryURL)
+	raw := trimmed
+	if !strings.HasPrefix(strings.ToLower(trimmed), "https://") && !strings.HasPrefix(strings.ToLower(trimmed), "http://") {
+		raw = "https://" + trimmed
 	}
 	parsedURL, err := url.Parse(raw)
 	var host string
 	if err == nil && parsedURL.Host != "" {
 		host = parsedURL.Host
 	} else {
-		host = strings.TrimPrefix(g.Registry.RegistryURL, "https://")
+		host = strings.TrimPrefix(trimmed, "https://")
 		host = strings.TrimPrefix(host, "http://")
 		for _, sep := range []string{"/", "?", "#"} {
 			if idx := strings.Index(host, sep); idx != -1 {

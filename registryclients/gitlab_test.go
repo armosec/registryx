@@ -252,6 +252,17 @@ func TestGitLabRegistryClient_getGitLabAPIBaseURL(t *testing.T) {
 			registryURL: "example.com?token=secret",
 			want:        "https://gitlab.example.com/api/v4",
 		},
+		// --- Leading/trailing whitespace: trimmed so returned URL has no spaces ---
+		{
+			name:        "Leading and trailing whitespace - host trimmed",
+			registryURL: "  gitlab.example.com  ",
+			want:        "https://gitlab.example.com/api/v4",
+		},
+		{
+			name:        "Leading whitespace only - host trimmed",
+			registryURL: "\t\thttps://gitlab.example.com",
+			want:        "https://gitlab.example.com/api/v4",
+		},
 	}
 
 	for _, tt := range tests {
