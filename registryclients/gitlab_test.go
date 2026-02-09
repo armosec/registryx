@@ -231,6 +231,27 @@ func TestGitLabRegistryClient_getGitLabAPIBaseURL(t *testing.T) {
 			registryURL: "https://registry.gitlab-si.test.example.com:443",
 			want:        "https://gitlab-si.test.example.com:443/api/v4",
 		},
+		// --- No scheme with query/fragment: host must not include ? or # ---
+		{
+			name:        "No scheme with query - host trimmed at ?",
+			registryURL: "gitlab.example.com?x=1",
+			want:        "https://gitlab.example.com/api/v4",
+		},
+		{
+			name:        "No scheme with fragment - host trimmed at #",
+			registryURL: "gitlab.example.com#anchor",
+			want:        "https://gitlab.example.com/api/v4",
+		},
+		{
+			name:        "No scheme with query and fragment - host trimmed",
+			registryURL: "gitlab-si.test.example.com?foo=bar#section",
+			want:        "https://gitlab-si.test.example.com/api/v4",
+		},
+		{
+			name:        "Plain host no scheme with query - prepend gitlab, host trimmed",
+			registryURL: "example.com?token=secret",
+			want:        "https://gitlab.example.com/api/v4",
+		},
 	}
 
 	for _, tt := range tests {

@@ -63,26 +63,31 @@ func (g *GitLabRegistryClient) getRepositoriesFromGitLabAPI(ctx context.Context)
 }
 
 func (g *GitLabRegistryClient) getGitLabAPIBaseURL() string {
-	registryURL := g.Registry.RegistryURL
-
-	parsedURL, err := url.Parse(registryURL)
+	raw := g.Registry.RegistryURL
+	if !strings.HasPrefix(strings.ToLower(raw), "https://") && !strings.HasPrefix(strings.ToLower(raw), "http://") {
+		raw = "https://" + raw
+	}
+	parsedURL, err := url.Parse(raw)
+	var host string
 	if err == nil && parsedURL.Host != "" {
-		registryURL = parsedURL.Host
+		host = parsedURL.Host
 	} else {
-		registryURL = strings.TrimPrefix(registryURL, "https://")
-		registryURL = strings.TrimPrefix(registryURL, "http://")
-		if idx := strings.Index(registryURL, "/"); idx != -1 {
-			registryURL = registryURL[:idx]
+		host = strings.TrimPrefix(g.Registry.RegistryURL, "https://")
+		host = strings.TrimPrefix(host, "http://")
+		for _, sep := range []string{"/", "?", "#"} {
+			if idx := strings.Index(host, sep); idx != -1 {
+				host = host[:idx]
+			}
 		}
 	}
 
-	registryURL = strings.TrimPrefix(registryURL, "registry.")
+	host = strings.TrimPrefix(host, "registry.")
 
-	if !hostLooksLikeGitLab(registryURL) {
-		registryURL = "gitlab." + registryURL
+	if !hostLooksLikeGitLab(host) {
+		host = "gitlab." + host
 	}
 
-	return fmt.Sprintf("https://%s/api/v4", registryURL)
+	return fmt.Sprintf("https://%s/api/v4", host)
 }
 
 func hostLooksLikeGitLab(host string) bool {
