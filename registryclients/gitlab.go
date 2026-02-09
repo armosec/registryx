@@ -35,8 +35,6 @@ type gitLabRepository struct {
 }
 
 func (g *GitLabRegistryClient) GetAllRepositories(ctx context.Context) ([]string, error) {
-	// Use GitLab Projects API instead of Docker Registry v2 _catalog endpoint
-	// because GitLab doesn't support _catalog for personal access tokens
 	return g.getRepositoriesFromGitLabAPI(ctx)
 }
 
@@ -54,7 +52,6 @@ func (g *GitLabRegistryClient) getRepositoriesFromGitLabAPI(ctx context.Context)
 	for _, project := range projects {
 		repos, err := g.getProjectRepositories(ctx, httpClient, baseURL, project.ID)
 		if err != nil {
-			// Continue if a single project fails (e.g., no registry enabled)
 			continue
 		}
 		for _, repo := range repos {
@@ -65,13 +62,6 @@ func (g *GitLabRegistryClient) getRepositoriesFromGitLabAPI(ctx context.Context)
 	return allRepos, nil
 }
 
-// getGitLabAPIBaseURL extracts the GitLab API base URL from RegistryURL
-// RegistryURL might be like:
-//   - "registry.gitlab.eudev1.cyberarmorsoft.com" (Docker registry) -> extract "gitlab.eudev1.cyberarmorsoft.com"
-//   - "gitlab.eudev1.cyberarmorsoft.com" (GitLab instance) -> use as-is
-//   - "https://gitlab.eudev1.cyberarmorsoft.com/root/test" (with scheme and path) -> extract hostname
-//
-// Returns the API base URL like "https://gitlab.eudev1.cyberarmorsoft.com/api/v4"
 func (g *GitLabRegistryClient) getGitLabAPIBaseURL() string {
 	registryURL := g.Registry.RegistryURL
 
@@ -88,11 +78,19 @@ func (g *GitLabRegistryClient) getGitLabAPIBaseURL() string {
 
 	registryURL = strings.TrimPrefix(registryURL, "registry.")
 
-	if !strings.HasPrefix(registryURL, "gitlab.") && registryURL != "gitlab.com" {
+	if !hostLooksLikeGitLab(registryURL) {
 		registryURL = "gitlab." + registryURL
 	}
 
 	return fmt.Sprintf("https://%s/api/v4", registryURL)
+}
+
+func hostLooksLikeGitLab(host string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if host == "" {
+		return false
+	}
+	return strings.Contains(host, "gitlab")
 }
 
 func (g *GitLabRegistryClient) getUserProjects(ctx context.Context, baseURL string) ([]gitLabProject, error) {
@@ -102,7 +100,6 @@ func (g *GitLabRegistryClient) getUserProjects(ctx context.Context, baseURL stri
 	httpClient := &http.Client{}
 
 	for {
-		// Use /projects endpoint instead of /users/{username}/projects for personal access tokens
 		url := fmt.Sprintf("%s/projects?page=%d&per_page=%d&min_access_level=30&membership=true",
 			baseURL, page, perPage)
 
@@ -161,7 +158,6 @@ func (g *GitLabRegistryClient) getProjectRepositories(ctx context.Context, httpC
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		// Project has no container registry
 		return []gitLabRepository{}, nil
 	}
 
