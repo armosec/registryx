@@ -59,16 +59,20 @@ func MakeRegistryOptions(isStrict, isInsecure, skipTLSVerify bool, defaultRegist
 	return &RegistryOptions{strict: isStrict, insecure: isInsecure, defaultRegistry: defaultRegistry, defaultTag: defaultTag, project: project, skipTLSVerify: skipTLSVerify, kind: kind}
 }
 
+// MakeRepoWithRegistry builds a name.Repository by prepending the target registry
+// before parsing, preserving repo paths that contain registry-like prefixes
+// (e.g. "docker.io/prom/blackbox-exporter" stored inside an ACR registry).
 func MakeRepoWithRegistry(repoName string, registry *name.Registry) (*name.Repository, error) {
-	repo, err := name.NewRepository(repoName)
+	refName := repoName
+	if registry != nil {
+		refName = registry.RegistryStr() + "/" + repoName
+	}
+
+	repo, err := name.NewRepository(refName)
 	if err != nil {
 		return nil, err
 	}
-	if registry != nil {
-		repo.Registry = *registry
-	}
 	return &repo, nil
-
 }
 
 func (r *RegistryOptions) Kind() RegistryKind {
