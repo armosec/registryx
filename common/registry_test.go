@@ -181,6 +181,22 @@ func TestMakeRepoWithRegistry(t *testing.T) {
 			wantRepository: "my_org/my_image",
 		},
 
+		// --- Already-qualified repo name (same registry) should not double-prepend ---
+		{
+			name:           "already-qualified repo name with matching registry",
+			repoName:       "myacr.azurecr.io/myapp",
+			registryHost:   "myacr.azurecr.io",
+			wantRegistry:   "myacr.azurecr.io",
+			wantRepository: "myapp",
+		},
+		{
+			name:           "already-qualified nested repo with matching registry",
+			repoName:       "myacr.azurecr.io/team/myapp",
+			registryHost:   "myacr.azurecr.io",
+			wantRegistry:   "myacr.azurecr.io",
+			wantRepository: "team/myapp",
+		},
+
 		// --- Error cases ---
 		{
 			name:         "empty repo name",
@@ -197,6 +213,7 @@ func TestMakeRepoWithRegistry(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			var registry *name.Registry
 			if tt.registryHost != "" {
@@ -256,6 +273,7 @@ func TestMakeRepoWithRegistry_NilRegistry(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			repo, err := MakeRepoWithRegistry(tt.repoName, nil)
 			if err != nil {

@@ -65,7 +65,11 @@ func MakeRegistryOptions(isStrict, isInsecure, skipTLSVerify bool, defaultRegist
 func MakeRepoWithRegistry(repoName string, registry *name.Registry) (*name.Repository, error) {
 	refName := repoName
 	if registry != nil {
-		refName = registry.RegistryStr() + "/" + repoName
+		if parsedRepo, err := name.NewRepository(repoName); err == nil && parsedRepo.RegistryStr() == registry.RegistryStr() {
+			refName = repoName
+		} else {
+			refName = registry.RegistryStr() + "/" + repoName
+		}
 	}
 
 	repo, err := name.NewRepository(refName)
