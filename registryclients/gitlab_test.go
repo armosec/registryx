@@ -1,6 +1,11 @@
 package registryclients
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/armosec/armoapi-go/armotypes"
@@ -275,6 +280,152 @@ func TestGitLabRegistryClient_getGitLabAPIBaseURL(t *testing.T) {
 			}
 			if got := client.getGitLabAPIBaseURL(); got != tt.want {
 				t.Errorf("getGitLabAPIBaseURL() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGitLabRegistryClient_discoverRegistryHost_integration(t *testing.T) {
+	const registryActualHost = "gitlab-si-reg.example.test"
+	const repoPath = "group/myproject"
+
+	// Fake GitLab API server that returns location pointing to registryActualHost
+	gitlabAPIMux := http.NewServeMux()
+	gitlabAPIMux.HandleFunc("/api/v4/projects", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]gitLabProject{{ID: 1, PathWithNamespace: "group"}})
+	})
+	gitlabAPIMux.HandleFunc("/api/v4/projects/1/registry/repositories", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		repos := []gitLabRepository{{
+			ID:       10,
+			Path:     repoPath,
+			Location: fmt.Sprintf("%s/%s", registryActualHost, repoPath),
+		}}
+		_ = json.NewEncoder(w).Encode(repos)
+	})
+	gitlabAPIServer := httptest.NewServer(gitlabAPIMux)
+	defer gitlabAPIServer.Close()
+
+	// RegistryURL is the full API server URL including scheme (simulating the GitLab web URL the user entered)
+	reg := &armotypes.GitlabImageRegistry{
+		RegistryURL: gitlabAPIServer.URL,
+	}
+	reg.Repositories = []string{repoPath}
+	client := &GitLabRegistryClient{
+		Registry: reg,
+		Options:  &common.RegistryOptions{},
+	}
+
+	// Verify discoverRegistryHost returns the actual registry host
+	discoveredHost, err := client.discoverRegistryHost(context.Background())
+	if err != nil {
+		t.Fatalf("discoverRegistryHost() error: %v", err)
+	}
+	if discoveredHost != registryActualHost {
+		t.Errorf("discoverRegistryHost() = %q, want %q", discoveredHost, registryActualHost)
+	}
+
+}
+
+func TestGitLabRegistryClient_discoverRegistryHost(t *testing.T) {
+	tests := []struct {
+		name              string
+		selectedRepos     []string
+		apiProjects       []gitLabProject
+		apiRepos          map[int][]gitLabRepository
+		wantHost          string
+		wantFallbackToURL bool
+	}{
+		{
+			name:          "discovers non-standard registry hostname from location field",
+			selectedRepos: []string{"team-exploitation/kubernetes/sftpgo"},
+			apiProjects:   []gitLabProject{{ID: 1, PathWithNamespace: "team-exploitation/kubernetes"}},
+			apiRepos: map[int][]gitLabRepository{
+				1: {{ID: 10, Path: "team-exploitation/kubernetes/sftpgo", Location: "gitlab-si-reg.hefr.ch/team-exploitation/kubernetes/sftpgo"}},
+			},
+			wantHost:          "gitlab-si-reg.hefr.ch",
+			wantFallbackToURL: false,
+		},
+		{
+			name:          "discovers standard registry hostname from location field",
+			selectedRepos: []string{"mygroup/myproject"},
+			apiProjects:   []gitLabProject{{ID: 2, PathWithNamespace: "mygroup"}},
+			apiRepos: map[int][]gitLabRepository{
+				2: {{ID: 20, Path: "mygroup/myproject", Location: "registry.gitlab.example.com/mygroup/myproject"}},
+			},
+			wantHost:          "registry.gitlab.example.com",
+			wantFallbackToURL: false,
+		},
+		{
+			name:          "falls back to RegistryURL when no repos match",
+			selectedRepos: []string{"group/nonexistent"},
+			apiProjects:   []gitLabProject{{ID: 3, PathWithNamespace: "group"}},
+			apiRepos: map[int][]gitLabRepository{
+				3: {{ID: 30, Path: "group/other-repo", Location: "registry.gitlab.example.com/group/other-repo"}},
+			},
+			wantHost:          "",
+			wantFallbackToURL: true,
+		},
+		{
+			name:          "falls back when location field is empty",
+			selectedRepos: []string{"group/myproject"},
+			apiProjects:   []gitLabProject{{ID: 4, PathWithNamespace: "group"}},
+			apiRepos: map[int][]gitLabRepository{
+				4: {{ID: 40, Path: "group/myproject", Location: ""}},
+			},
+			wantHost:          "",
+			wantFallbackToURL: true,
+		},
+		{
+			name:              "returns empty string when no repositories are selected",
+			selectedRepos:     []string{},
+			apiProjects:       nil,
+			apiRepos:          nil,
+			wantHost:          "",
+			wantFallbackToURL: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mux := http.NewServeMux()
+			mux.HandleFunc("/api/v4/projects", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(tt.apiProjects)
+			})
+			for projectID, repos := range tt.apiRepos {
+				path := fmt.Sprintf("/api/v4/projects/%d/registry/repositories", projectID)
+				mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(repos)
+				})
+			}
+			srv := httptest.NewServer(mux)
+			defer srv.Close()
+
+			reg := &armotypes.GitlabImageRegistry{
+				RegistryURL: srv.URL,
+			}
+			reg.Repositories = tt.selectedRepos
+			client := &GitLabRegistryClient{
+				Registry: reg,
+				Options:  &common.RegistryOptions{},
+			}
+
+			got, err := client.discoverRegistryHost(context.Background())
+
+			if tt.wantFallbackToURL {
+				if got != "" {
+					t.Errorf("discoverRegistryHost() = %q, want empty string (fallback)", got)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("discoverRegistryHost() unexpected error: %v", err)
+				}
+				if got != tt.wantHost {
+					t.Errorf("discoverRegistryHost() = %q, want %q", got, tt.wantHost)
+				}
 			}
 		})
 	}
