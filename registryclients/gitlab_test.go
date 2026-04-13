@@ -343,9 +343,9 @@ func TestGitLabRegistryClient_discoverRegistryHost(t *testing.T) {
 			selectedRepos: []string{"team-exploitation/kubernetes/sftpgo"},
 			apiProjects:   []gitLabProject{{ID: 1, PathWithNamespace: "team-exploitation/kubernetes"}},
 			apiRepos: map[int][]gitLabRepository{
-				1: {{ID: 10, Path: "team-exploitation/kubernetes/sftpgo", Location: "gitlab-si-reg.hefr.ch/team-exploitation/kubernetes/sftpgo"}},
+				1: {{ID: 10, Path: "team-exploitation/kubernetes/sftpgo", Location: "gitlab-reg.example.com/team-exploitation/kubernetes/sftpgo"}},
 			},
-			wantHost:          "gitlab-si-reg.hefr.ch",
+			wantHost:          "gitlab-reg.example.com",
 			wantFallbackToURL: false,
 		},
 		{

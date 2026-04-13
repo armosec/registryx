@@ -190,7 +190,7 @@ func (g *GitLabRegistryClient) getProjectRepositories(ctx context.Context, httpC
 // discoverRegistryHost queries the GitLab API to find the actual container registry
 // hostname from the `location` field of a registry repository. This handles self-hosted
 // GitLab instances where the registry hostname differs from the GitLab web URL
-// (e.g. "gitlab-si-reg.hefr.ch" vs "gitlab-si.hefr.ch").
+// (e.g. "gitlab-reg.example.com" vs "gitlab.example.com").
 // Returns empty string if not found; callers should fall back to RegistryURL.
 func (g *GitLabRegistryClient) discoverRegistryHost(ctx context.Context) (string, error) {
 	if len(g.Registry.Repositories) == 0 {
@@ -278,8 +278,8 @@ func (g *GitLabRegistryClient) resolveRegistryHost(ctx context.Context) string {
 func (g *GitLabRegistryClient) GetImagesToScan(ctx context.Context) (map[string]string, error) {
 	// Auto-discover the actual container registry hostname via the GitLab API.
 	// Self-hosted GitLab instances can have a separate registry hostname
-	// (e.g. "gitlab-si-reg.hefr.ch") that differs from the GitLab web URL
-	// ("gitlab-si.hefr.ch"). Using the web URL for registry ops returns
+	// (e.g. "gitlab-reg.example.com") that differs from the GitLab web URL
+	// ("gitlab.example.com"). Using the web URL for registry ops returns
 	// service=dependency_proxy in the auth challenge, causing 403 errors.
 	registryHost := g.resolveRegistryHost(ctx)
 
