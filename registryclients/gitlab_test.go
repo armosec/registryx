@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/armosec/armoapi-go/armotypes"
@@ -416,6 +417,9 @@ func TestGitLabRegistryClient_discoverRegistryHost(t *testing.T) {
 			got, err := client.discoverRegistryHost(context.Background())
 
 			if tt.wantFallbackToURL {
+				if err != nil {
+					t.Fatalf("discoverRegistryHost() unexpected error in fallback case: %v", err)
+				}
 				if got != "" {
 					t.Errorf("discoverRegistryHost() = %q, want empty string (fallback)", got)
 				}
@@ -429,4 +433,90 @@ func TestGitLabRegistryClient_discoverRegistryHost(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGitLabRegistryClient_resolveRegistryHost(t *testing.T) {
+	const discoveredHost = "gitlab-si-reg.example.test"
+	const repoPath = "group/myproject"
+
+	makeAPIServer := func(t *testing.T, location string) (*httptest.Server, *atomic.Int32) {
+		t.Helper()
+		var hits atomic.Int32
+		mux := http.NewServeMux()
+		mux.HandleFunc("/api/v4/projects", func(w http.ResponseWriter, r *http.Request) {
+			hits.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode([]gitLabProject{{ID: 1, PathWithNamespace: "group"}})
+		})
+		mux.HandleFunc("/api/v4/projects/1/registry/repositories", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode([]gitLabRepository{{ID: 10, Path: repoPath, Location: location}})
+		})
+		return httptest.NewServer(mux), &hits
+	}
+
+	t.Run("prefers discovered host over RegistryURL", func(t *testing.T) {
+		srv, _ := makeAPIServer(t, fmt.Sprintf("%s/%s", discoveredHost, repoPath))
+		defer srv.Close()
+
+		reg := &armotypes.GitlabImageRegistry{RegistryURL: srv.URL}
+		reg.Repositories = []string{repoPath}
+		client := &GitLabRegistryClient{Registry: reg, Options: &common.RegistryOptions{}}
+
+		got := client.resolveRegistryHost(context.Background())
+		if got != discoveredHost {
+			t.Errorf("resolveRegistryHost() = %q, want %q", got, discoveredHost)
+		}
+	})
+
+	t.Run("falls back to RegistryURL when discovery fails", func(t *testing.T) {
+		// Use an already-closed server to force a discovery error.
+		srv, _ := makeAPIServer(t, "")
+		srv.Close()
+
+		reg := &armotypes.GitlabImageRegistry{RegistryURL: srv.URL}
+		reg.Repositories = []string{repoPath}
+		client := &GitLabRegistryClient{Registry: reg, Options: &common.RegistryOptions{}}
+
+		got := client.resolveRegistryHost(context.Background())
+		// The fallback strips the scheme from srv.URL (e.g. "http://127.0.0.1:PORT").
+		wantHost := extractHostFromLocation(srv.URL)
+		if got != wantHost {
+			t.Errorf("resolveRegistryHost() = %q, want %q (normalized RegistryURL)", got, wantHost)
+		}
+	})
+
+	t.Run("strips scheme from RegistryURL in fallback", func(t *testing.T) {
+		// Server is immediately closed so discovery returns an error.
+		srv, _ := makeAPIServer(t, "")
+		srv.Close()
+
+		reg := &armotypes.GitlabImageRegistry{RegistryURL: "https://gitlab.example.com"}
+		reg.Repositories = []string{repoPath}
+		client := &GitLabRegistryClient{Registry: reg, Options: &common.RegistryOptions{}}
+
+		got := client.resolveRegistryHost(context.Background())
+		if got != "gitlab.example.com" {
+			t.Errorf("resolveRegistryHost() = %q, want %q", got, "gitlab.example.com")
+		}
+	})
+
+	t.Run("caches result and avoids redundant API calls", func(t *testing.T) {
+		srv, hits := makeAPIServer(t, fmt.Sprintf("%s/%s", discoveredHost, repoPath))
+		defer srv.Close()
+
+		reg := &armotypes.GitlabImageRegistry{RegistryURL: srv.URL}
+		reg.Repositories = []string{repoPath}
+		client := &GitLabRegistryClient{Registry: reg, Options: &common.RegistryOptions{}}
+
+		first := client.resolveRegistryHost(context.Background())
+		second := client.resolveRegistryHost(context.Background())
+
+		if first != discoveredHost || second != discoveredHost {
+			t.Errorf("resolveRegistryHost() = %q, %q; want %q both times", first, second, discoveredHost)
+		}
+		if n := hits.Load(); n != 1 {
+			t.Errorf("GitLab API called %d time(s), want exactly 1 (cached after first call)", n)
+		}
+	})
 }

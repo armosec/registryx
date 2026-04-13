@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/registryx/common"
@@ -21,6 +21,11 @@ import (
 type GitLabRegistryClient struct {
 	Registry *armotypes.GitlabImageRegistry
 	Options  *common.RegistryOptions
+
+	// registryHostOnce guards cachedRegistryHost so concurrent callers of
+	// GetImagesToScan share a single discovery round-trip.
+	registryHostOnce   sync.Once
+	cachedRegistryHost string
 }
 
 // GitLabProject represents a GitLab project from the API
@@ -192,7 +197,8 @@ func (g *GitLabRegistryClient) discoverRegistryHost(ctx context.Context) (string
 		return "", nil
 	}
 
-	// Normalise RegistryURL to <scheme>://<host>/api/v4 without altering the hostname.
+	// Build the GitLab API base URL from RegistryURL.
+	// The original scheme is preserved when present; defaults to https otherwise.
 	raw := strings.TrimSpace(g.Registry.RegistryURL)
 	if lower := strings.ToLower(raw); !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
 		raw = "https://" + raw
@@ -213,6 +219,11 @@ func (g *GitLabRegistryClient) discoverRegistryHost(ctx context.Context) (string
 		return "", fmt.Errorf("discoverRegistryHost: failed to list projects: %w", err)
 	}
 
+	selectedSet := make(map[string]struct{}, len(g.Registry.Repositories))
+	for _, r := range g.Registry.Repositories {
+		selectedSet[r] = struct{}{}
+	}
+
 	httpClient := &http.Client{}
 	for _, project := range projects {
 		repos, err := g.getProjectRepositories(ctx, httpClient, baseURL, project.ID)
@@ -220,11 +231,9 @@ func (g *GitLabRegistryClient) discoverRegistryHost(ctx context.Context) (string
 			continue
 		}
 		for _, repo := range repos {
-			for _, selected := range g.Registry.Repositories {
-				if repo.Path == selected && repo.Location != "" {
-					if host := extractHostFromLocation(repo.Location); host != "" {
-						return host, nil
-					}
+			if _, ok := selectedSet[repo.Path]; ok && repo.Location != "" {
+				if host := extractHostFromLocation(repo.Location); host != "" {
+					return host, nil
 				}
 			}
 		}
@@ -246,18 +255,33 @@ func extractHostFromLocation(location string) string {
 	return ""
 }
 
+// resolveRegistryHost returns the bare hostname (no scheme) to use for registry
+// operations. It prefers the host discovered via the GitLab API (which is the
+// actual container-registry hostname for self-hosted instances) and falls back
+// to the configured RegistryURL with any scheme/path stripped. The result is
+// cached so concurrent calls and repeated invocations share a single API round-trip.
+func (g *GitLabRegistryClient) resolveRegistryHost(ctx context.Context) string {
+	g.registryHostOnce.Do(func() {
+		if discoveredHost, err := g.discoverRegistryHost(ctx); err == nil && discoveredHost != "" {
+			g.cachedRegistryHost = discoveredHost
+			return
+		}
+		if host := extractHostFromLocation(g.Registry.RegistryURL); host != "" {
+			g.cachedRegistryHost = host
+			return
+		}
+		g.cachedRegistryHost = strings.TrimSpace(g.Registry.RegistryURL)
+	})
+	return g.cachedRegistryHost
+}
+
 func (g *GitLabRegistryClient) GetImagesToScan(ctx context.Context) (map[string]string, error) {
 	// Auto-discover the actual container registry hostname via the GitLab API.
 	// Self-hosted GitLab instances can have a separate registry hostname
 	// (e.g. "gitlab-si-reg.hefr.ch") that differs from the GitLab web URL
 	// ("gitlab-si.hefr.ch"). Using the web URL for registry ops returns
 	// service=dependency_proxy in the auth challenge, causing 403 errors.
-	registryHost := g.Registry.RegistryURL
-	if discoveredHost, err := g.discoverRegistryHost(ctx); err != nil {
-		log.Printf("gitlab registry: failed to discover registry host, falling back to RegistryURL %q: %v", g.Registry.RegistryURL, err)
-	} else if discoveredHost != "" {
-		registryHost = discoveredHost
-	}
+	registryHost := g.resolveRegistryHost(ctx)
 
 	registry, err := name.NewRegistry(registryHost)
 	if err != nil {
