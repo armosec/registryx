@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-
 	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/registryx/common"
 	"github.com/armosec/registryx/registries/defaultregistry"
@@ -30,8 +29,9 @@ type gitLabProject struct {
 
 // GitLabRepository represents a container repository from GitLab API
 type gitLabRepository struct {
-	ID   int    `json:"id"`
-	Path string `json:"path"`
+	ID       int    `json:"id"`
+	Path     string `json:"path"`
+	Location string `json:"location"`
 }
 
 func (g *GitLabRegistryClient) GetAllRepositories(ctx context.Context) ([]string, error) {
@@ -180,8 +180,58 @@ func (g *GitLabRegistryClient) getProjectRepositories(ctx context.Context, httpC
 	return repos, nil
 }
 
-func (g *GitLabRegistryClient) GetImagesToScan(_ context.Context) (map[string]string, error) {
-	registry, err := name.NewRegistry(g.Registry.RegistryURL)
+// discoverRegistryHost queries the GitLab API to find the actual container registry
+// hostname from the `location` field of a registry repository. This handles self-hosted
+// GitLab instances where the registry hostname differs from the GitLab web URL
+// (e.g. "gitlab-reg.example.com" vs "gitlab.example.com").
+func (g *GitLabRegistryClient) discoverRegistryHost(ctx context.Context, baseURL string) string {
+	if len(g.Registry.Repositories) == 0 {
+		return ""
+	}
+
+	projects, err := g.getUserProjects(ctx, baseURL)
+	if err != nil {
+		return ""
+	}
+
+	selectedSet := make(map[string]struct{}, len(g.Registry.Repositories))
+	for _, r := range g.Registry.Repositories {
+		selectedSet[r] = struct{}{}
+	}
+
+	httpClient := &http.Client{}
+	for _, project := range projects {
+		repos, err := g.getProjectRepositories(ctx, httpClient, baseURL, project.ID)
+		if err != nil {
+			continue
+		}
+		for _, repo := range repos {
+			if _, ok := selectedSet[repo.Path]; ok && repo.Location != "" {
+				// Location format: "registry-host.example.com/group/project"
+				loc := repo.Location
+				for _, prefix := range []string{"https://", "http://"} {
+					loc = strings.TrimPrefix(loc, prefix)
+				}
+				if host, _, ok := strings.Cut(loc, "/"); ok && host != "" {
+					return host
+				}
+			}
+		}
+	}
+
+	return ""
+}
+
+func (g *GitLabRegistryClient) GetImagesToScan(ctx context.Context) (map[string]string, error) {
+	// Try to discover the actual container registry hostname via the GitLab API.
+	// Self-hosted GitLab instances can have a separate registry hostname
+	// (e.g. "gitlab-reg.example.com") that differs from the GitLab web URL.
+	registryHost := g.discoverRegistryHost(ctx, g.getGitLabAPIBaseURL())
+	if registryHost == "" {
+		registryHost = g.Registry.RegistryURL
+	}
+
+	registry, err := name.NewRegistry(registryHost)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +247,7 @@ func (g *GitLabRegistryClient) GetImagesToScan(_ context.Context) (map[string]st
 			return nil, err
 		}
 		if tag != "" {
-			images[fmt.Sprintf("%s/%s", g.Registry.RegistryURL, repository)] = tag
+			images[fmt.Sprintf("%s/%s", registryHost, repository)] = tag
 		}
 	}
 	return images, nil
