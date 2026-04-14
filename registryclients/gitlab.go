@@ -197,8 +197,12 @@ func (g *GitLabRegistryClient) discoverRegistryHost(ctx context.Context) (string
 		return "", nil
 	}
 
-	// Build the GitLab API base URL from RegistryURL.
-	// The original scheme is preserved when present; defaults to https otherwise.
+	// Build the GitLab API base URL from RegistryURL, preserving the original
+	// scheme and host as-given. We intentionally do NOT use getGitLabAPIBaseURL()
+	// here because that method applies heuristic transformations (strips "registry."
+	// prefix, prepends "gitlab." when missing) designed for the GetAllRepositories
+	// flow. Discovery must try the URL as the user entered it — if it fails, the
+	// caller (resolveRegistryHost) falls back to RegistryURL anyway.
 	raw := strings.TrimSpace(g.Registry.RegistryURL)
 	if lower := strings.ToLower(raw); !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
 		raw = "https://" + raw
@@ -224,6 +228,9 @@ func (g *GitLabRegistryClient) discoverRegistryHost(ctx context.Context) (string
 		selectedSet[r] = struct{}{}
 	}
 
+	// TODO: getUserProjects fetches all pages upfront. For large GitLab instances
+	// this could be slow. Consider using filtered project search
+	// (e.g. /api/v4/projects?search=<namespace>) to reduce the number of projects fetched.
 	httpClient := &http.Client{}
 	for _, project := range projects {
 		repos, err := g.getProjectRepositories(ctx, httpClient, baseURL, project.ID)
