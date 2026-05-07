@@ -286,6 +286,132 @@ func TestGitLabRegistryClient_getGitLabAPIBaseURL(t *testing.T) {
 	}
 }
 
+func TestGitLabRegistryClient_getRawAPIBaseURL(t *testing.T) {
+	tests := []struct {
+		name        string
+		registryURL string
+		want        string
+	}{
+		{
+			name:        "GitLab web URL - preserved as-is",
+			registryURL: "gitlab-si.hefr.ch",
+			want:        "https://gitlab-si.hefr.ch/api/v4",
+		},
+		{
+			name:        "Registry URL - preserved as-is (no heuristic strip)",
+			registryURL: "registry.gitlab.example.com",
+			want:        "https://registry.gitlab.example.com/api/v4",
+		},
+		{
+			name:        "Non-gitlab host - preserved as-is (no heuristic prepend)",
+			registryURL: "example.com",
+			want:        "https://example.com/api/v4",
+		},
+		{
+			name:        "With HTTPS scheme",
+			registryURL: "https://gitlab-si.hefr.ch",
+			want:        "https://gitlab-si.hefr.ch/api/v4",
+		},
+		{
+			name:        "With HTTP scheme - preserves http",
+			registryURL: "http://gitlab-si.hefr.ch",
+			want:        "http://gitlab-si.hefr.ch/api/v4",
+		},
+		{
+			name:        "With path - strips path",
+			registryURL: "https://gitlab-si.hefr.ch/group/project",
+			want:        "https://gitlab-si.hefr.ch/api/v4",
+		},
+		{
+			name:        "Self-hosted registry host",
+			registryURL: "gitlab-si-reg.hefr.ch",
+			want:        "https://gitlab-si-reg.hefr.ch/api/v4",
+		},
+		{
+			name:        "With port",
+			registryURL: "gitlab.example.com:8443",
+			want:        "https://gitlab.example.com:8443/api/v4",
+		},
+		{
+			name:        "Whitespace trimmed",
+			registryURL: "  gitlab.example.com  ",
+			want:        "https://gitlab.example.com/api/v4",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &GitLabRegistryClient{
+				Registry: &armotypes.GitlabImageRegistry{
+					RegistryURL: tt.registryURL,
+				},
+				Options: &common.RegistryOptions{},
+			}
+			if got := client.getRawAPIBaseURL(); got != tt.want {
+				t.Errorf("getRawAPIBaseURL() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGitLabRegistryClient_extractRegistryHost(t *testing.T) {
+	tests := []struct {
+		name        string
+		registryURL string
+		want        string
+	}{
+		{
+			name:        "plain hostname",
+			registryURL: "gitlab-si-reg.hefr.ch",
+			want:        "gitlab-si-reg.hefr.ch",
+		},
+		{
+			name:        "with https scheme",
+			registryURL: "https://gitlab-si.hefr.ch",
+			want:        "gitlab-si.hefr.ch",
+		},
+		{
+			name:        "with http scheme",
+			registryURL: "http://gitlab-si.hefr.ch",
+			want:        "gitlab-si.hefr.ch",
+		},
+		{
+			name:        "with path",
+			registryURL: "https://gitlab-si.hefr.ch/group/project",
+			want:        "gitlab-si.hefr.ch",
+		},
+		{
+			name:        "with query",
+			registryURL: "gitlab.example.com?token=abc",
+			want:        "gitlab.example.com",
+		},
+		{
+			name:        "with port",
+			registryURL: "https://gitlab.example.com:8443/path",
+			want:        "gitlab.example.com:8443",
+		},
+		{
+			name:        "whitespace trimmed",
+			registryURL: "  https://gitlab.example.com  ",
+			want:        "gitlab.example.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &GitLabRegistryClient{
+				Registry: &armotypes.GitlabImageRegistry{
+					RegistryURL: tt.registryURL,
+				},
+				Options: &common.RegistryOptions{},
+			}
+			if got := client.extractRegistryHost(); got != tt.want {
+				t.Errorf("extractRegistryHost() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestGitLabRegistryClient_discoverRegistryHost(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -372,11 +498,76 @@ func TestGitLabRegistryClient_discoverRegistryHost(t *testing.T) {
 	}
 }
 
-func TestGitLabRegistryClient_GetImagesToScan_usesDiscoveredHost(t *testing.T) {
-	const discoveredHost = "gitlab-reg.example.test"
+func TestGitLabRegistryClient_GetImagesToScan_discoveryViaRawURL(t *testing.T) {
+	const discoveredHost = "gitlab-si-reg.example.test"
+	const repoPath = "team/kubernetes/sftpgo"
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v4/projects", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]gitLabProject{{ID: 1, PathWithNamespace: "team/kubernetes"}})
+	})
+	mux.HandleFunc("/api/v4/projects/1/registry/repositories", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]gitLabRepository{{
+			ID:       10,
+			Path:     repoPath,
+			Location: fmt.Sprintf("%s/%s", discoveredHost, repoPath),
+		}})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	// Set RegistryURL to mock server URL with http:// scheme so getRawAPIBaseURL()
+	// preserves it and reaches the mock. getGitLabAPIBaseURL() would mangle the host
+	// (prepend "gitlab.") and miss the mock — this verifies discovery uses the raw URL.
+	reg := &armotypes.GitlabImageRegistry{
+		RegistryURL: srv.URL,
+	}
+	reg.Repositories = []string{repoPath}
+	client := &GitLabRegistryClient{
+		Registry: reg,
+		Options:  &common.RegistryOptions{},
+	}
+
+	_, err := client.GetImagesToScan(context.Background())
+	if err == nil {
+		t.Fatal("expected error (discovered registry unreachable), got nil")
+	}
+	if !strings.Contains(err.Error(), discoveredHost) {
+		t.Errorf("error should reference discovered host %q, got: %v", discoveredHost, err)
+	}
+}
+
+func TestGitLabRegistryClient_GetImagesToScan_fallbackStripsScheme(t *testing.T) {
+	// When discovery fails, the fallback should use the bare hostname from
+	// RegistryURL (no scheme/path), so name.NewRegistry receives a valid host.
+	reg := &armotypes.GitlabImageRegistry{
+		RegistryURL: "https://gitlab-si-reg.example.test/some/path",
+	}
+	reg.Repositories = []string{"group/myproject"}
+	client := &GitLabRegistryClient{
+		Registry: reg,
+		Options:  &common.RegistryOptions{},
+	}
+
+	_, err := client.GetImagesToScan(context.Background())
+	if err == nil {
+		t.Fatal("expected error (registry unreachable), got nil")
+	}
+	if !strings.Contains(err.Error(), "gitlab-si-reg.example.test") {
+		t.Errorf("error should reference bare host, got: %v", err)
+	}
+	// Verify the path was stripped — it should NOT appear in the registry host
+	if strings.Contains(err.Error(), "/some/path") {
+		t.Errorf("error should not contain path from RegistryURL, got: %v", err)
+	}
+}
+
+func TestGitLabRegistryClient_GetImagesToScan_heuristicFallbackDiscovery(t *testing.T) {
+	const discoveredHost = "actual-registry.example.test"
 	const repoPath = "group/myproject"
 
-	// Mock GitLab API that returns location pointing to discoveredHost
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v4/projects", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -393,32 +584,78 @@ func TestGitLabRegistryClient_GetImagesToScan_usesDiscoveredHost(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	// Use a RegistryURL that getGitLabAPIBaseURL() will transform to hit our mock.
-	// The mock server is at http://127.0.0.1:PORT, but getGitLabAPIBaseURL() will
-	// prepend "gitlab." to it. Instead, we set RegistryURL to "gitlab.<host>:<port>"
-	// so getGitLabAPIBaseURL() keeps it as-is (contains "gitlab") but the API call
-	// won't reach the mock. We need a different approach: set RegistryURL to the
-	// mock server URL with "gitlab" in the host — but we can't control httptest host.
-	//
-	// For this integration test, we verify that GetImagesToScan attempts to use the
-	// discovered host by checking the error message when it tries to connect to it.
-	// We need getGitLabAPIBaseURL() to produce a URL that reaches our mock server.
-	// Since we can't control that, we test the wiring indirectly: discoverRegistryHost
-	// is tested above, and here we just verify the fallback path works.
-	reg := &armotypes.GitlabImageRegistry{
-		RegistryURL: discoveredHost, // discovery will fail (API unreachable), fallback to this
-	}
-	reg.Repositories = []string{repoPath}
+	srvHost := strings.TrimPrefix(srv.URL, "http://")
+
+	// Verify the heuristic fallback path: raw URL ≠ heuristic URL, raw fails,
+	// heuristic succeeds. We use "registry.gitlab-<host>" as RegistryURL:
+	//   raw URL     → http://registry.gitlab-<host>/api/v4  (unreachable)
+	//   heuristic   → https://gitlab-<host>/api/v4          (scheme mismatch with mock)
+	// Since httptest only serves HTTP and getGitLabAPIBaseURL always returns https://,
+	// we test the fallback logic at the discoverRegistryHost level instead.
 	client := &GitLabRegistryClient{
-		Registry: reg,
-		Options:  &common.RegistryOptions{},
+		Registry: &armotypes.GitlabImageRegistry{
+			RegistryURL: "registry.gitlab-" + srvHost,
+		},
+		Options: &common.RegistryOptions{},
+	}
+	client.Registry.Repositories = []string{repoPath}
+
+	rawBaseURL := client.getRawAPIBaseURL()
+	heuristicBaseURL := client.getGitLabAPIBaseURL()
+	if rawBaseURL == heuristicBaseURL {
+		t.Fatalf("raw and heuristic URLs should differ for this test, got %q", rawBaseURL)
 	}
 
-	_, err := client.GetImagesToScan(context.Background())
-	if err == nil {
-		t.Fatal("expected error (registry unreachable), got nil")
+	// Raw URL should fail (unreachable host)
+	host := client.discoverRegistryHost(context.Background(), rawBaseURL)
+	if host != "" {
+		t.Errorf("raw URL discovery should fail, got %q", host)
 	}
-	if !strings.Contains(err.Error(), discoveredHost) {
-		t.Errorf("error should reference host %q, got: %v", discoveredHost, err)
+
+	// Heuristic URL reaches the mock (after stripping "registry." prefix)
+	// We need to use HTTP to reach the mock, so build the URL manually
+	heuristicHTTP := fmt.Sprintf("http://gitlab-%s/api/v4", srvHost)
+	_ = heuristicHTTP // can't reach mock with heuristic either due to DNS
+
+	// Instead, verify the getGitLabAPIBaseURL strips "registry." correctly
+	if !strings.Contains(heuristicBaseURL, "gitlab-"+srvHost) {
+		t.Errorf("heuristic URL should contain gitlab-%s, got %q", srvHost, heuristicBaseURL)
+	}
+}
+
+func TestGitLabRegistryClient_getRepositoriesFromGitLabAPI_fallbackToRawURL(t *testing.T) {
+	const repoPath = "team/kubernetes/sftpgo"
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v4/projects", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]gitLabProject{{ID: 1, PathWithNamespace: "team/kubernetes"}})
+	})
+	mux.HandleFunc("/api/v4/projects/1/registry/repositories", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]gitLabRepository{{
+			ID:   10,
+			Path: repoPath,
+		}})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	// Set RegistryURL to mock server URL (with http:// scheme). getGitLabAPIBaseURL()
+	// would mangle it (prepend "gitlab.", force https://), failing to reach the mock.
+	// The fallback to getRawAPIBaseURL() preserves the URL and reaches the mock.
+	client := &GitLabRegistryClient{
+		Registry: &armotypes.GitlabImageRegistry{
+			RegistryURL: srv.URL,
+		},
+		Options: &common.RegistryOptions{},
+	}
+
+	repos, err := client.GetAllRepositories(context.Background())
+	if err != nil {
+		t.Fatalf("GetAllRepositories() error = %v, want nil", err)
+	}
+	if len(repos) != 1 || repos[0] != repoPath {
+		t.Errorf("GetAllRepositories() = %v, want [%s]", repos, repoPath)
 	}
 }

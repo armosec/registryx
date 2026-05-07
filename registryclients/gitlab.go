@@ -35,7 +35,11 @@ type gitLabRepository struct {
 }
 
 func (g *GitLabRegistryClient) GetAllRepositories(ctx context.Context) ([]string, error) {
-	return g.getRepositoriesFromGitLabAPI(ctx)
+	repos, err := g.getRepositoriesFromGitLabAPI(ctx)
+	if err != nil {
+		return g.getRepositoriesFromDockerAPI(ctx)
+	}
+	return repos, nil
 }
 
 func (g *GitLabRegistryClient) getRepositoriesFromGitLabAPI(ctx context.Context) ([]string, error) {
@@ -43,7 +47,15 @@ func (g *GitLabRegistryClient) getRepositoriesFromGitLabAPI(ctx context.Context)
 
 	projects, err := g.getUserProjects(ctx, baseURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user projects: %w", err)
+		if rawBaseURL := g.getRawAPIBaseURL(); rawBaseURL != baseURL {
+			projects, err = g.getUserProjects(ctx, rawBaseURL)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get user projects: %w", err)
+			}
+			baseURL = rawBaseURL
+		} else {
+			return nil, fmt.Errorf("failed to get user projects: %w", err)
+		}
 	}
 
 	var allRepos []string
@@ -60,6 +72,55 @@ func (g *GitLabRegistryClient) getRepositoriesFromGitLabAPI(ctx context.Context)
 	}
 
 	return allRepos, nil
+}
+
+// getRepositoriesFromDockerAPI lists repositories using the Docker Registry v2
+// _catalog endpoint. This is used as a fallback when the GitLab API is
+// unreachable (e.g. RegistryURL points to the registry host, not the GitLab web host).
+func (g *GitLabRegistryClient) getRepositoriesFromDockerAPI(ctx context.Context) ([]string, error) {
+	registryHost := g.extractRegistryHost()
+	registry, err := name.NewRegistry(registryHost)
+	if err != nil {
+		return nil, err
+	}
+	iRegistry, err := defaultregistry.NewRegistry(&authn.AuthConfig{Username: g.Registry.Username, Password: g.Registry.AccessToken}, &registry, g.Options)
+	if err != nil {
+		return nil, err
+	}
+
+	iRegistry.SetMaxPageSize(1000)
+	return getAllRepositories(ctx, iRegistry)
+}
+
+// getRawAPIBaseURL builds the GitLab API base URL from RegistryURL as-given,
+// preserving the original hostname without heuristic transformations. This is
+// used for registry host discovery, where the user-entered URL should be tried
+// verbatim before falling back to heuristic transforms.
+func (g *GitLabRegistryClient) getRawAPIBaseURL() string {
+	raw := strings.TrimSpace(g.Registry.RegistryURL)
+	if lower := strings.ToLower(raw); !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
+		raw = "https://" + raw
+	}
+	if u, err := url.Parse(raw); err == nil && u.Host != "" {
+		return fmt.Sprintf("%s://%s/api/v4", u.Scheme, u.Host)
+	}
+	host := strings.TrimPrefix(strings.TrimPrefix(raw, "https://"), "http://")
+	if idx := strings.IndexAny(host, "/?#"); idx != -1 {
+		host = host[:idx]
+	}
+	return fmt.Sprintf("https://%s/api/v4", host)
+}
+
+// extractRegistryHost returns the bare hostname from RegistryURL with scheme,
+// path, query, and fragment stripped. Used as fallback when discovery fails.
+func (g *GitLabRegistryClient) extractRegistryHost() string {
+	raw := strings.TrimSpace(g.Registry.RegistryURL)
+	raw = strings.TrimPrefix(raw, "https://")
+	raw = strings.TrimPrefix(raw, "http://")
+	if idx := strings.IndexAny(raw, "/?#"); idx != -1 {
+		raw = raw[:idx]
+	}
+	return raw
 }
 
 func (g *GitLabRegistryClient) getGitLabAPIBaseURL() string {
@@ -225,10 +286,22 @@ func (g *GitLabRegistryClient) discoverRegistryHost(ctx context.Context, baseURL
 func (g *GitLabRegistryClient) GetImagesToScan(ctx context.Context) (map[string]string, error) {
 	// Try to discover the actual container registry hostname via the GitLab API.
 	// Self-hosted GitLab instances can have a separate registry hostname
-	// (e.g. "gitlab-reg.example.com") that differs from the GitLab web URL.
-	registryHost := g.discoverRegistryHost(ctx, g.getGitLabAPIBaseURL())
+	// (e.g. "gitlab-si-reg.hefr.ch") that differs from the GitLab web URL
+	// (e.g. "gitlab-si.hefr.ch"). Using the wrong host causes Docker auth to
+	// request service=dependency_proxy instead of service=container_registry → 403.
+	//
+	// Try the raw URL first (preserves the user-entered host verbatim), then fall
+	// back to the heuristic URL (strips "registry.", prepends "gitlab.") which
+	// handles cases like "registry.gitlab.example.com" → "gitlab.example.com".
+	rawBaseURL := g.getRawAPIBaseURL()
+	registryHost := g.discoverRegistryHost(ctx, rawBaseURL)
 	if registryHost == "" {
-		registryHost = g.Registry.RegistryURL
+		if heuristicBaseURL := g.getGitLabAPIBaseURL(); heuristicBaseURL != rawBaseURL {
+			registryHost = g.discoverRegistryHost(ctx, heuristicBaseURL)
+		}
+	}
+	if registryHost == "" {
+		registryHost = g.extractRegistryHost()
 	}
 
 	registry, err := name.NewRegistry(registryHost)
