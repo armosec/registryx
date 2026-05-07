@@ -35,7 +35,11 @@ type gitLabRepository struct {
 }
 
 func (g *GitLabRegistryClient) GetAllRepositories(ctx context.Context) ([]string, error) {
-	return g.getRepositoriesFromGitLabAPI(ctx)
+	repos, err := g.getRepositoriesFromGitLabAPI(ctx)
+	if err != nil {
+		return g.getRepositoriesFromDockerAPI(ctx)
+	}
+	return repos, nil
 }
 
 func (g *GitLabRegistryClient) getRepositoriesFromGitLabAPI(ctx context.Context) ([]string, error) {
@@ -68,6 +72,24 @@ func (g *GitLabRegistryClient) getRepositoriesFromGitLabAPI(ctx context.Context)
 	}
 
 	return allRepos, nil
+}
+
+// getRepositoriesFromDockerAPI lists repositories using the Docker Registry v2
+// _catalog endpoint. This is used as a fallback when the GitLab API is
+// unreachable (e.g. RegistryURL points to the registry host, not the GitLab web host).
+func (g *GitLabRegistryClient) getRepositoriesFromDockerAPI(ctx context.Context) ([]string, error) {
+	registryHost := g.extractRegistryHost()
+	registry, err := name.NewRegistry(registryHost)
+	if err != nil {
+		return nil, err
+	}
+	iRegistry, err := defaultregistry.NewRegistry(&authn.AuthConfig{Username: g.Registry.Username, Password: g.Registry.AccessToken}, &registry, g.Options)
+	if err != nil {
+		return nil, err
+	}
+
+	iRegistry.SetMaxPageSize(1000)
+	return getAllRepositories(ctx, iRegistry)
 }
 
 // getRawAPIBaseURL builds the GitLab API base URL from RegistryURL as-given,
