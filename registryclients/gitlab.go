@@ -4,16 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/armosec/armoapi-go/armotypes"
+	"github.com/armosec/registryx/common"
+	"github.com/armosec/registryx/registries/defaultregistry"
+	"github.com/google/go-containerregistry/pkg/authn"
+	"github.com/google/go-containerregistry/pkg/name"
+	dockerregistry "github.com/moby/moby/api/types/registry"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
-	"github.com/armosec/armoapi-go/armotypes"
-	"github.com/armosec/registryx/common"
-	"github.com/armosec/registryx/registries/defaultregistry"
-	dockerregistry "github.com/docker/docker/api/types/registry"
-	"github.com/google/go-containerregistry/pkg/authn"
-	"github.com/google/go-containerregistry/pkg/name"
 )
 
 type GitLabRegistryClient struct {

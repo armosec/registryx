@@ -11,9 +11,9 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.46
 	github.com/aws/aws-sdk-go-v2/service/ecr v1.36.6
 	github.com/aws/aws-sdk-go-v2/service/sts v1.33.1
-	github.com/docker/docker v28.3.3+incompatible
 	github.com/google/go-containerregistry v0.20.6
 	github.com/hashicorp/go-version v1.7.0
+	github.com/moby/moby/api v1.56.0
 	golang.org/x/oauth2 v0.30.0
 	k8s.io/utils v0.0.0-20241210054802-24370beab758
 )
