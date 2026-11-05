@@ -6,9 +6,9 @@ import (
 	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/registryx/common"
 	"github.com/armosec/registryx/registries/defaultregistry"
-	dockerregistry "github.com/docker/docker/api/types/registry"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
+	dockerregistry "github.com/moby/moby/api/types/registry"
 )
 
 type AzureRegistryClient struct {

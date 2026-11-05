@@ -2,7 +2,7 @@ package interfaces
 
 import (
 	"context"
-	dockerregistry "github.com/docker/docker/api/types/registry"
+	dockerregistry "github.com/moby/moby/api/types/registry"
 )
 
 type RegistryClient interface {
