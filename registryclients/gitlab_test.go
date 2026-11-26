@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -421,4 +422,221 @@ func TestGitLabRegistryClient_GetImagesToScan_usesDiscoveredHost(t *testing.T) {
 	if !strings.Contains(err.Error(), discoveredHost) {
 		t.Errorf("error should reference host %q, got: %v", discoveredHost, err)
 	}
+}
+
+// gitLabRepoPages serves one project's container repositories in pages of perPage,
+// the way the GitLab API does for ?page=N&per_page=M.
+func gitLabRepoPages(t *testing.T, all []gitLabRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		perPage, err := strconv.Atoi(r.URL.Query().Get("per_page"))
+		if err != nil || perPage <= 0 {
+			perPage = 20 // GitLab's default page size
+		}
+		page, err := strconv.Atoi(r.URL.Query().Get("page"))
+		if err != nil || page <= 0 {
+			page = 1
+		}
+		start := (page - 1) * perPage
+		if start > len(all) {
+			start = len(all)
+		}
+		end := start + perPage
+		if end > len(all) {
+			end = len(all)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(all[start:end])
+	}
+}
+
+func TestGitLabRegistryClient_listRepositories(t *testing.T) {
+	manyRepos := make([]gitLabRepository, 0, 150)
+	for i := 0; i < 150; i++ {
+		manyRepos = append(manyRepos, gitLabRepository{ID: i, Path: fmt.Sprintf("group/a/repo-%03d", i)})
+	}
+
+	t.Run("lists every page of a project's repositories", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/api/v4/projects", func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode([]gitLabProject{{ID: 1, PathWithNamespace: "group/a"}})
+		})
+		mux.HandleFunc("/api/v4/projects/1/registry/repositories", gitLabRepoPages(t, manyRepos))
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+
+		client := &GitLabRegistryClient{Registry: &armotypes.GitlabImageRegistry{}, Options: &common.RegistryOptions{}}
+		got, err := client.listRepositories(context.Background(), srv.URL+"/api/v4")
+
+		if err != nil {
+			t.Fatalf("listRepositories() error = %v", err)
+		}
+		if len(got) != 150 {
+			t.Fatalf("listRepositories() returned %d repositories, want 150", len(got))
+		}
+		if got[0] != "group/a/repo-000" || got[149] != "group/a/repo-149" {
+			t.Errorf("listRepositories() first/last = %q/%q", got[0], got[149])
+		}
+	})
+
+	t.Run("fails when a project's repositories cannot be read", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/api/v4/projects", func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode([]gitLabProject{{ID: 1, PathWithNamespace: "group/a"}, {ID: 2, PathWithNamespace: "group/b"}})
+		})
+		mux.HandleFunc("/api/v4/projects/1/registry/repositories", gitLabRepoPages(t, manyRepos[:3]))
+		mux.HandleFunc("/api/v4/projects/2/registry/repositories", func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, `{"message":"500 Internal Server Error"}`, http.StatusInternalServerError)
+		})
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+
+		client := &GitLabRegistryClient{Registry: &armotypes.GitlabImageRegistry{}, Options: &common.RegistryOptions{}}
+		got, err := client.listRepositories(context.Background(), srv.URL+"/api/v4")
+
+		if err == nil {
+			t.Fatalf("listRepositories() = %v, want an error", got)
+		}
+		if !strings.Contains(err.Error(), "group/b") {
+			t.Errorf("listRepositories() error = %q, want it to name project group/b", err)
+		}
+	})
+
+	t.Run("a project without a container registry has no repositories", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/api/v4/projects", func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode([]gitLabProject{{ID: 1, PathWithNamespace: "group/a"}, {ID: 2, PathWithNamespace: "group/no-registry"}})
+		})
+		mux.HandleFunc("/api/v4/projects/1/registry/repositories", gitLabRepoPages(t, manyRepos[:2]))
+		mux.HandleFunc("/api/v4/projects/2/registry/repositories", func(w http.ResponseWriter, r *http.Request) {
+			http.NotFound(w, r)
+		})
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+
+		client := &GitLabRegistryClient{Registry: &armotypes.GitlabImageRegistry{}, Options: &common.RegistryOptions{}}
+		got, err := client.listRepositories(context.Background(), srv.URL+"/api/v4")
+
+		if err != nil {
+			t.Fatalf("listRepositories() error = %v", err)
+		}
+		if len(got) != 2 {
+			t.Errorf("listRepositories() = %v, want the 2 repositories of group/a", got)
+		}
+	})
+}
+
+// gitLabPagedRepos serves repositories with a fixed server-side page size, sending
+// X-Next-Page like GitLab does (empty on the last page). goneFromPage > 0 answers 404
+// from that page on.
+func gitLabPagedRepos(all []gitLabRepository, pageSize, goneFromPage int) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		page, err := strconv.Atoi(r.URL.Query().Get("page"))
+		if err != nil || page <= 0 {
+			page = 1
+		}
+		if goneFromPage > 0 && page >= goneFromPage {
+			http.NotFound(w, r)
+			return
+		}
+		start := (page - 1) * pageSize
+		if start > len(all) {
+			start = len(all)
+		}
+		end := start + pageSize
+		if end > len(all) {
+			end = len(all)
+		}
+		next := ""
+		if end < len(all) {
+			next = strconv.Itoa(page + 1)
+		}
+		w.Header().Set("X-Next-Page", next)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(all[start:end])
+	}
+}
+
+func TestGitLabRegistryClient_listRepositories_reviewCases(t *testing.T) {
+	repos := make([]gitLabRepository, 0, 150)
+	for i := 0; i < 150; i++ {
+		repos = append(repos, gitLabRepository{ID: i, Path: fmt.Sprintf("group/a/repo-%03d", i)})
+	}
+	list := func(t *testing.T, mux *http.ServeMux) ([]string, error) {
+		srv := httptest.NewServer(mux)
+		t.Cleanup(srv.Close)
+		client := &GitLabRegistryClient{Registry: &armotypes.GitlabImageRegistry{}, Options: &common.RegistryOptions{}}
+		return client.listRepositories(context.Background(), srv.URL+"/api/v4")
+	}
+
+	t.Run("skips projects whose container registry is disabled", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/api/v4/projects", func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{"id": 1, "path_with_namespace": "group/a", "container_registry_access_level": "enabled"},
+				{"id": 2, "path_with_namespace": "group/no-registry", "container_registry_access_level": "disabled"},
+			})
+		})
+		mux.HandleFunc("/api/v4/projects/1/registry/repositories", gitLabPagedRepos(repos[:2], 100, 0))
+		mux.HandleFunc("/api/v4/projects/2/registry/repositories", func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, `{"message":"403 Forbidden"}`, http.StatusForbidden)
+		})
+
+		got, err := list(t, mux)
+
+		if err != nil {
+			t.Fatalf("listRepositories() error = %v", err)
+		}
+		if len(got) != 2 {
+			t.Errorf("listRepositories() = %v, want the 2 repositories of group/a", got)
+		}
+	})
+
+	t.Run("a 403 on a project with its registry enabled still fails", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/api/v4/projects", func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{"id": 2, "path_with_namespace": "group/forbidden", "container_registry_access_level": "enabled"},
+			})
+		})
+		mux.HandleFunc("/api/v4/projects/2/registry/repositories", func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, `{"message":"403 Forbidden"}`, http.StatusForbidden)
+		})
+
+		got, err := list(t, mux)
+
+		if err == nil || !strings.Contains(err.Error(), "group/forbidden") {
+			t.Fatalf("listRepositories() = %v, %v; want an error naming group/forbidden", got, err)
+		}
+	})
+
+	t.Run("a 404 after the first page fails instead of dropping pages", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/api/v4/projects", func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode([]gitLabProject{{ID: 1, PathWithNamespace: "group/a"}})
+		})
+		mux.HandleFunc("/api/v4/projects/1/registry/repositories", gitLabPagedRepos(repos, 100, 2))
+
+		got, err := list(t, mux)
+
+		if err == nil {
+			t.Fatalf("listRepositories() = %d repositories, want an error", len(got))
+		}
+	})
+
+	t.Run("follows X-Next-Page when the server pages smaller than requested", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/api/v4/projects", func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode([]gitLabProject{{ID: 1, PathWithNamespace: "group/a"}})
+		})
+		mux.HandleFunc("/api/v4/projects/1/registry/repositories", gitLabPagedRepos(repos, 20, 0))
+
+		got, err := list(t, mux)
+
+		if err != nil {
+			t.Fatalf("listRepositories() error = %v", err)
+		}
+		if len(got) != 150 {
+			t.Errorf("listRepositories() returned %d repositories, want 150", len(got))
+		}
+	})
 }
