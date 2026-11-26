@@ -39,8 +39,14 @@ func (g *GitLabRegistryClient) GetAllRepositories(ctx context.Context) ([]string
 }
 
 func (g *GitLabRegistryClient) getRepositoriesFromGitLabAPI(ctx context.Context) ([]string, error) {
-	baseURL := g.getGitLabAPIBaseURL()
+	return g.listRepositories(ctx, g.getGitLabAPIBaseURL())
+}
 
+// listRepositories lists the container repositories of every project the token can
+// reach. A project whose repositories cannot be read fails the whole listing: callers
+// use the result as the complete repository list, so a partial one must not pass as
+// success. A project without a container registry (404) has no repositories.
+func (g *GitLabRegistryClient) listRepositories(ctx context.Context, baseURL string) ([]string, error) {
 	projects, err := g.getUserProjects(ctx, baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user projects: %w", err)
@@ -52,7 +58,7 @@ func (g *GitLabRegistryClient) getRepositoriesFromGitLabAPI(ctx context.Context)
 	for _, project := range projects {
 		repos, err := g.getProjectRepositories(ctx, httpClient, baseURL, project.ID)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("failed to list container repositories of project %s: %w", project.PathWithNamespace, err)
 		}
 		for _, repo := range repos {
 			allRepos = append(allRepos, repo.Path)
@@ -147,37 +153,60 @@ func (g *GitLabRegistryClient) getUserProjects(ctx context.Context, baseURL stri
 	return allProjects, nil
 }
 
+// getProjectRepositories returns all container repositories of a project, following
+// pages: the API returns 20 per page by default.
 func (g *GitLabRegistryClient) getProjectRepositories(ctx context.Context, httpClient *http.Client, baseURL string, projectID int) ([]gitLabRepository, error) {
-	url := fmt.Sprintf("%s/projects/%d/registry/repositories", baseURL, projectID)
+	const perPage = 100
+	var allRepos []gitLabRepository
+
+	for page := 1; ; page++ {
+		repos, found, err := g.getProjectRepositoriesPage(ctx, httpClient, baseURL, projectID, page, perPage)
+		if err != nil {
+			return nil, err
+		}
+		if !found {
+			return []gitLabRepository{}, nil
+		}
+		allRepos = append(allRepos, repos...)
+		if len(repos) < perPage {
+			return allRepos, nil
+		}
+	}
+}
+
+// getProjectRepositoriesPage reads one page of a project's container repositories.
+// found is false when the project has no container registry (404).
+func (g *GitLabRegistryClient) getProjectRepositoriesPage(ctx context.Context, httpClient *http.Client, baseURL string, projectID, page, perPage int) ([]gitLabRepository, bool, error) {
+	url := fmt.Sprintf("%s/projects/%d/registry/repositories?page=%d&per_page=%d", baseURL, projectID, page, perPage)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	req.Header.Set("PRIVATE-TOKEN", g.Registry.AccessToken)
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return []gitLabRepository{}, nil
+		return nil, false, nil
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("GitLab API error: %d - %s", resp.StatusCode, string(body))
+		return nil, false, fmt.Errorf("GitLab API error: %d - %s", resp.StatusCode, string(body))
 	}
 
 	var repos []gitLabRepository
 	if err := json.NewDecoder(resp.Body).Decode(&repos); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	return repos, nil
+	return repos, true, nil
 }
 
 // discoverRegistryHost queries the GitLab API to find the actual container registry
